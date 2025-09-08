@@ -35,6 +35,7 @@
 #include "vulkan_hooks.h"
 
 #include "thirdparty/misc/smolv.h"
+#include "thirdparty/vulkan/include/vulkan/vulkan_core.h"
 
 #if defined(ANDROID_ENABLED)
 #include "platform/android/java_godot_wrapper.h"
@@ -533,6 +534,9 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, false);
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
@@ -761,6 +765,9 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDevice16BitStorageFeaturesKHR storage_feature = {};
 		VkPhysicalDeviceMultiviewFeatures multiview_features = {};
 		VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_cache_control_features = {};
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_structure_features = {};
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_pipeline_features = {};
+		
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
@@ -813,6 +820,19 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			pipeline_cache_control_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES;
 			pipeline_cache_control_features.pNext = next_features;
 			next_features = &pipeline_cache_control_features;
+		}
+
+		
+		if (enabled_device_extension_names.has(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
+			acceleration_structure_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+			acceleration_structure_features.pNext = next_features;
+			next_features = &acceleration_structure_features;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+			ray_tracing_pipeline_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+			ray_tracing_pipeline_features.pNext = next_features;
+			next_features = &ray_tracing_pipeline_features;
 		}
 
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
@@ -900,6 +920,8 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceSubgroupProperties subgroup_properties = {};
 		VkPhysicalDeviceSubgroupSizeControlProperties subgroup_size_control_properties = {};
 		VkPhysicalDeviceProperties2 physical_device_properties_2 = {};
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR acceleration_propterties = {};
+		VkPhysicalDeviceRayTracingPipelinePropertiesKHR raytracing_properties = {};
 
 		const bool use_1_1_properties = physical_device_properties.apiVersion >= VK_API_VERSION_1_1;
 		if (use_1_1_properties) {
@@ -931,6 +953,18 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			fdm_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT;
 			fdm_properties.pNext = next_properties;
 			next_properties = &fdm_properties;
+		}
+
+		if (acceleration_capabilities.acceleration_structure_supported) {
+			acceleration_propterties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+			acceleration_propterties.pNext = next_properties;
+			next_properties = &acceleration_propterties;
+		}
+
+		if (raytracing_capabilities.raytracing_supported) {
+			raytracing_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+			raytracing_properties.pNext = next_properties;
+			next_properties = &raytracing_properties;
 		}
 
 		physical_device_properties_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -1147,6 +1181,22 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		create_info_next = &memory_report_info;
 	}
 #endif
+
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_structure_features = {};
+	if (acceleration_capabilities.acceleration_structure_supported) {
+		acceleration_structure_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+		acceleration_structure_features.pNext = create_info_next;
+		acceleration_structure_features.accelerationStructure = acceleration_capabilities.acceleration_structure_supported;
+		create_info_next = &acceleration_structure_features;
+	}
+
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
+	if (raytracing_capabilities.raytracing_supported) {
+		raytracing_pipeline_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+		raytracing_pipeline_features.rayTracingPipeline = raytracing_capabilities.raytracing_supported;
+		raytracing_pipeline_features.pNext = create_info_next;
+		create_info_next = &raytracing_pipeline_features;
+	}
 
 	VkPhysicalDeviceVulkan11Features vulkan_1_1_features = {};
 	VkPhysicalDevice16BitStorageFeaturesKHR storage_features = {};

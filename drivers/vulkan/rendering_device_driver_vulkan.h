@@ -91,6 +91,15 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 		bool storage_input_output_16 = false;
 	};
 
+	struct AccelerationStructureCapabilities {
+		bool acceleration_structure_supported = false;
+		uint32_t min_scratch_offset_allignment = 0;
+	};
+
+	struct RayTracingCapabilities {
+		
+	};
+
 	struct DeviceFunctions {
 		PFN_vkCreateSwapchainKHR CreateSwapchainKHR = nullptr;
 		PFN_vkDestroySwapchainKHR DestroySwapchainKHR = nullptr;
@@ -132,6 +141,8 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	ShaderCapabilities shader_capabilities;
 	StorageBufferCapabilities storage_buffer_capabilities;
 	RenderingShaderContainerFormatVulkan shader_container_format;
+	AccelerationStructureCapabilities acceleration_capabilities;
+	RayTracingCapabilities raytracing_capabilities;
 	bool buffer_device_address_support = false;
 	bool vulkan_memory_model_support = false;
 	bool vulkan_memory_model_device_scope_support = false;
