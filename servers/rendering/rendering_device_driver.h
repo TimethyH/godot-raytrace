@@ -136,6 +136,8 @@ public:
 	DEFINE_ID(QueryPool);
 	DEFINE_ID(Fence);
 	DEFINE_ID(Semaphore);
+	DEFINE_ID(AccelerationStructure);
+	DEFINE_ID(RayTracingPipeline);
 
 public:
 	/*****************/

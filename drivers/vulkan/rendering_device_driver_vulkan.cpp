@@ -5257,11 +5257,79 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	return PipelineID(vk_pipeline);
 }
 
+
+
+// ----- RAY TRACING -----
+
+RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer,
+	VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset,
+	uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) {
+
+	const VertexFormatInfo *vertex_format_info = (const VertexFormatInfo*)p_vertex_format.id;
+	VkDeviceSize buffer_offset = vertex_format_info->vk_attributes[0].offset;
+	VkDeviceSize vertex_stride = vertex_format_info->vk_bindings[0].stride;
+	VkFormat vertex_format = vertex_format_info->vk_attributes[0].format;
+
+	VkDeviceAddress vert_memory = buffer_get_device_address(p_vertex_buffer) + buffer_offset;
+	VkDeviceAddress index_memory = buffer_get_device_address(p_index_buffer) + p_index_offset_bytes;
+
+	uint32_t max_vertices = p_vertex_count - 1;
+	uint32_t max_primitives = max_vertices / 3;
+	if (p_index_buffer) {
+		max_primitives = p_index_count / 3;
+	}
+
+	// Fill in the AS component structs
+
+	AccelerationStructureInfo* acceleration_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
+
+	
+	acceleration_info->geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	acceleration_info->geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+	acceleration_info->geometry.flags = p_geometry_flags;
+	
+	acceleration_info->geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+	acceleration_info->geometry.geometry.triangles.vertexFormat = vertex_format;
+	acceleration_info->geometry.geometry.triangles.vertexData.deviceAddress = vert_memory;
+	acceleration_info->geometry.geometry.triangles.vertexStride = vertex_stride;
+	acceleration_info->geometry.geometry.triangles.indexType = p_index_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+	acceleration_info->geometry.geometry.triangles.indexData.deviceAddress = index_memory;
+	acceleration_info->geometry.geometry.triangles.transformData = {};
+	acceleration_info->geometry.geometry.triangles.maxVertex = max_vertices;
+
+	uint32_t first_vertex = p_vertex_offset / vertex_stride;
+	acceleration_info->range_info.firstVertex = first_vertex;
+	acceleration_info->range_info.primitiveCount= max_primitives;
+	acceleration_info->range_info.primitiveOffset = 0;
+	acceleration_info->range_info.transformOffset = 0;
+
+	acceleration_info->build_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	acceleration_info->build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	acceleration_info->build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	acceleration_info->build_info.pGeometries = &acceleration_info->geometry;
+	acceleration_info->build_info.geometryCount = 1;
+	acceleration_info->build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+
+
+	/*
+	 * Continue from 5.1.1 to finish BLAS creation
+	 *VkAccelerationStructureBuildSizesInfoKHR size_info = {};
+	size_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+
+	vkGetAccelerationStructureBuildSizesKHR(vk_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accel_info->build_info, &max_primitive_count, &size_info);
+	_acceleration_structure_create(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, size_info, accel_info);
+
+	return AccelerationStructureID(accel_info);*/
+}
+
+
+
 /*****************/
 /**** COMPUTE ****/
 /*****************/
 
 // ----- COMMANDS -----
+
 
 void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;

@@ -44,6 +44,7 @@
 #include "thirdparty/vulkan/vk_mem_alloc.h"
 
 #include "drivers/vulkan/godot_vulkan.h"
+#include "thirdparty/vulkan/include/vulkan/vulkan_core.h"
 
 // Design principles:
 // - Vulkan structs are zero-initialized and fields not requiring a non-zero value are omitted (except in cases where expresivity reasons apply).
@@ -97,7 +98,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	};
 
 	struct RayTracingCapabilities {
-		
+		bool raytracing_supported = false;
 	};
 
 	struct DeviceFunctions {
@@ -611,6 +612,23 @@ public:
 			RenderPassID p_render_pass,
 			uint32_t p_render_subpass,
 			VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
+
+	// ----- RAYTRACING -----
+
+	struct AccelerationStructureInfo {
+		VkAccelerationStructureKHR vk_acceleration_structure = VK_NULL_HANDLE;
+
+		// scratch buffer data
+		uint32_t alignment;
+		uint32_t size;
+
+		// AS components
+		VkAccelerationStructureGeometryKHR geometry;
+		VkAccelerationStructureBuildRangeInfoKHR range_info;
+		VkAccelerationStructureBuildGeometryInfoKHR build_info;
+	};
+
+	AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes);
 
 	/*****************/
 	/**** COMPUTE ****/
