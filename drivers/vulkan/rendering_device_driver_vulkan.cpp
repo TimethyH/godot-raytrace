@@ -1054,6 +1054,18 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		if (subgroup_capabilities.quad_operations_in_all_stages) {
 			print_verbose("  quad operations in all stages");
 		}
+
+		if (acceleration_capabilities.acceleration_structure_supported) {
+			print_verbose("- Vulkan Acceleration Structure Supported");
+			acceleration_capabilities.min_scratch_offset_allignment = acceleration_propterties.minAccelerationStructureScratchOffsetAlignment;
+			print_verbose(" Minimum Offset Acceleration Structure Scratch Buffer Alignment: " + itos(acceleration_capabilities.min_scratch_offset_allignment));
+		} else {
+			print_verbose("- Vulkan Acceleration Structure Not Supported.");
+		}
+
+		if (raytracing_capabilities.raytracing_supported) {
+			// fill rt data
+		}
 	}
 
 	return OK;
@@ -1683,6 +1695,7 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDEX_BIT, VK_BUFFER_USAGE_IN
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_VERTEX_BIT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDIRECT_BIT, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
+static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR));
 
 RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type) {
 	VkBufferCreateInfo create_info = {};
@@ -5311,17 +5324,57 @@ RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::crea
 	acceleration_info->build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
 
 
-	/*
-	 * Continue from 5.1.1 to finish BLAS creation
-	 *VkAccelerationStructureBuildSizesInfoKHR size_info = {};
+	VkAccelerationStructureBuildSizesInfoKHR size_info = {};
 	size_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
-	vkGetAccelerationStructureBuildSizesKHR(vk_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accel_info->build_info, &max_primitive_count, &size_info);
-	_acceleration_structure_create(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, size_info, accel_info);
+	vkGetAccelerationStructureBuildSizesKHR(vk_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &acceleration_info->build_info, &max_primitives, &size_info);
+	// create the acceleration structure
+	//_accele(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, size_info, acceleration_info);
 
-	return AccelerationStructureID(accel_info);*/
+	return AccelerationStructureID(acceleration_info);
 }
 
+void RenderingDeviceDriverVulkan::_create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info,AccelerationStructureInfo* r_acceleration_info
+	VkAccelerationStructureTypeKHR p_type) {
+
+	BufferID scratchBuffer = buffer_create(p_size_info.accelerationStructureSize, BUFFER_USAGE_DEVICE_ADDRESS_BIT | BUFFER_USAGE_STORAGE_BIT | BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, MEMORY_ALLOCATION_TYPE_GPU );
+	r_acceleration_info->buffer = scratchBuffer;
+
+	r_acceleration_info->alignment = acceleration_capabilities.min_scratch_offset_allignment;
+	r_acceleration_info->size = p_size_info.buildScratchSize + r_acceleration_info->alignment;
+
+	VkAccelerationStructureCreateInfoKHR acceleration_create_info = {};
+	acceleration_create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	acceleration_create_info.type = p_type;
+	acceleration_create_info.buffer = ((const BufferInfo *)scratchBuffer.id)->vk_buffer;
+	acceleration_create_info.size = p_size_info.accelerationStructureSize;
+
+	// Create/bind acceleration structure
+	if (vkCreateAccelerationStructureKHR(vk_device, &acceleration_create_info, nullptr, &r_acceleration_info->vk_acceleration_structure) != VK_SUCCESS) {
+		ERR_FAIL_MSG("vkCreateAccelerationStructure failed");		
+	}
+
+	r_acceleration_info->build_info.dstAccelerationStructure = r_acceleration_info->vk_acceleration_structure;
+}
+
+// Essentially adds alignment to the adress, if the adress is already aligned it does nothing
+// if the adress is not aligned, say 13 with alignment 8, it will return 16, the following multiple of 8.
+// -1 so the alignment does not advance the memory adress if it is already aligned.
+static VkDeviceAddress _align_up_address(VkDeviceAddress address, VkDeviceAddress alignment) {
+	return (address + (alignment - 1)) & ~(alignment - 1);
+}
+
+void RenderingDeviceDriverVulkan::build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer) {
+	const CommandBufferInfo *cmd = (const CommandBufferInfo *)p_cmd_id.id;
+	AccelerationStructureInfo *acceleration_info = (AccelerationStructureInfo *)p_acceleration_id.id;
+
+	VkAccelerationStructureBuildGeometryInfoKHR *build_info = &acceleration_info->build_info;
+	VkDeviceAddress adress = buffer_get_device_address(p_scratch_buffer);
+	build_info->scratchData.deviceAddress = _align_up_address(adress, acceleration_info->alignment);
+
+	const VkAccelerationStructureBuildRangeInfoKHR* range_info = &acceleration_info->range_info;
+	vkCmdBuildAccelerationStructuresKHR(cmd->vk_command_buffer, 1, build_info, &range_info);
+}
 
 
 /*****************/
@@ -5329,6 +5382,7 @@ RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::crea
 /*****************/
 
 // ----- COMMANDS -----
+
 
 
 void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
