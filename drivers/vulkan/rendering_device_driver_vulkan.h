@@ -618,6 +618,9 @@ public:
 	struct AccelerationStructureInfo {
 		VkAccelerationStructureKHR vk_acceleration_structure = VK_NULL_HANDLE;
 
+		// the buffer the AS uses
+		BufferID buffer;
+
 		// scratch buffer data
 		uint32_t alignment;
 		uint32_t size;
@@ -629,6 +632,9 @@ public:
 	};
 
 	AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes);
+	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo* r_acceleration_info, VkAccelerationStructureTypeKHR
+			p_type);
+	void build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer);
 
 	/*****************/
 	/**** COMPUTE ****/
