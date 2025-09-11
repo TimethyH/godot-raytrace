@@ -629,12 +629,17 @@ public:
 		VkAccelerationStructureGeometryKHR geometry;
 		VkAccelerationStructureBuildRangeInfoKHR range_info;
 		VkAccelerationStructureBuildGeometryInfoKHR build_info;
+		LocalVector<VkAccelerationStructureInstanceKHR> instances;
 	};
 
-	AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes);
+	AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t
+			p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags);
 	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo* r_acceleration_info, VkAccelerationStructureTypeKHR
 			p_type);
 	void build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer);
+	RDD::AccelerationStructureID create_tlas(BufferID p_instance_buffer);
+	void fill_tlas_instances(const LocalVector<AccelerationStructureID>& p_blasses, const LocalVector<Transform3D>& p_transforms, BufferID
+			p_instance_buffer);
 
 	/*****************/
 	/**** COMPUTE ****/

@@ -5377,6 +5377,80 @@ void RenderingDeviceDriverVulkan::build_cmd_acceleration_structure(CommandBuffer
 	vkCmdBuildAccelerationStructuresKHR(cmd->vk_command_buffer, 1, build_info, &range_info);
 }
 
+// copy pasted from the tutorial
+// Copies the translation matrix into the 3x4 rotation/scale matrix which is needed for vulkan RT
+static _FORCE_INLINE_ void _store_transform_in_3x4(const Transform3D &p_mtx, VkTransformMatrixKHR &r_mtx) {
+	r_mtx.matrix[0][0] = p_mtx.basis.rows[0][0];
+	r_mtx.matrix[0][1] = p_mtx.basis.rows[0][1];
+	r_mtx.matrix[0][2] = p_mtx.basis.rows[0][2];
+	r_mtx.matrix[0][3] = p_mtx.origin.x;
+	r_mtx.matrix[1][0] = p_mtx.basis.rows[1][0];
+	r_mtx.matrix[1][1] = p_mtx.basis.rows[1][1];
+	r_mtx.matrix[1][2] = p_mtx.basis.rows[1][2];
+	r_mtx.matrix[1][3] = p_mtx.origin.y;
+	r_mtx.matrix[2][0] = p_mtx.basis.rows[2][0];
+	r_mtx.matrix[2][1] = p_mtx.basis.rows[2][1];
+	r_mtx.matrix[2][2] = p_mtx.basis.rows[2][2];
+	r_mtx.matrix[2][3] = p_mtx.origin.z;
+}
+
+RDD::AccelerationStructureID RenderingDeviceDriverVulkan::create_tlas(BufferID p_instance_buffer) {
+
+	AccelerationStructureInfo *acceleration_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
+
+	acceleration_info->geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	acceleration_info->geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+	acceleration_info->geometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+	acceleration_info->geometry.geometry.instances.data.deviceAddress = buffer_get_device_address(p_instance_buffer);
+
+	acceleration_info->build_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	acceleration_info->build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+	acceleration_info->build_info.geometryCount = 1; // TODO: hardcoded 1?..
+	acceleration_info->build_info.pGeometries = &acceleration_info->geometry;
+	acceleration_info->build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	acceleration_info->build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+	acceleration_info->build_info.srcAccelerationStructure = VK_NULL_HANDLE;
+
+	uint32_t instance_count = buffer_get_allocation_size(p_instance_buffer) / sizeof(VkAccelerationStructureInstanceKHR);
+	VkAccelerationStructureBuildSizesInfoKHR size_info = {};
+	size_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+	vkGetAccelerationStructureBuildSizesKHR(vk_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &acceleration_info->build_info, &instance_count, &size_info);
+
+	VkAccelerationStructureCreateInfoKHR create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	create_info.size = size_info.accelerationStructureSize;
+	acceleration_info->range_info.primitiveCount = instance_count;
+
+	_create_acceleration_structure(size_info, acceleration_info, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR);
+
+	return AccelerationStructureID(acceleration_info);
+}
+
+void RenderingDeviceDriverVulkan::fill_tlas_instances(const LocalVector<AccelerationStructureID>& p_blasses, const LocalVector<Transform3D>& p_transforms, BufferID p_instance_buffer) {
+	uint32_t blas_count = p_blasses.size();
+	ERR_FAIL_COND(blas_count == 0);
+
+	LocalVector<VkAccelerationStructureInstanceKHR> instances;
+	instances.reserve(p_blasses.size());
+
+	for (uint32_t i = 0; i < blas_count; ++i) {
+		const AccelerationStructureID &blas = p_blasses[i];
+		AccelerationStructureInfo* blas_info = (AccelerationStructureInfo *)blas.id;
+
+		VkAccelerationStructureInstanceKHR &instance = instances[i];
+		_store_transform_in_3x4(p_transforms[i], instance.transform);
+		instance.instanceCustomIndex = i;
+		instance.mask = 0xFF; // only hit if rayMask & instanceMask != 0
+		instance.accelerationStructureReference = buffer_get_device_address(blas_info->buffer);
+		instance.instanceShaderBindingTableRecordOffset = 0;
+		instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+	}
+
+	uint8_t *pData = buffer_map(p_instance_buffer);
+	uint32_t instances_size = blas_count * sizeof(instances[0]);
+	memcpy(pData, instances.ptr(), instances_size);
+	buffer_unmap(p_instance_buffer);
+}
 
 /*****************/
 /**** COMPUTE ****/
