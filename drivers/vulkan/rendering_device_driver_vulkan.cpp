@@ -5329,14 +5329,15 @@ RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::crea
 
 	vkGetAccelerationStructureBuildSizesKHR(vk_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &acceleration_info->build_info, &max_primitives, &size_info);
 	// create the acceleration structure
-	//_accele(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, size_info, acceleration_info);
+	_create_acceleration_structure(size_info, acceleration_info, VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR);
 
 	return AccelerationStructureID(acceleration_info);
 }
 
-void RenderingDeviceDriverVulkan::_create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info,AccelerationStructureInfo* r_acceleration_info
+void RenderingDeviceDriverVulkan::_create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info,AccelerationStructureInfo* r_acceleration_info,
 	VkAccelerationStructureTypeKHR p_type) {
 
+	// creates separate scratch buffer memory for each AS
 	BufferID scratchBuffer = buffer_create(p_size_info.accelerationStructureSize, BUFFER_USAGE_DEVICE_ADDRESS_BIT | BUFFER_USAGE_STORAGE_BIT | BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, MEMORY_ALLOCATION_TYPE_GPU );
 	r_acceleration_info->buffer = scratchBuffer;
 
