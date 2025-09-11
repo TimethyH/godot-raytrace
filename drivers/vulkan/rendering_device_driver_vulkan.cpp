@@ -386,6 +386,21 @@ uint32_t RenderingDeviceDriverVulkan::SubgroupCapabilities::supported_stages_fla
 	if (supported_stages & VK_SHADER_STAGE_COMPUTE_BIT) {
 		flags += SHADER_STAGE_COMPUTE_BIT;
 	}
+	if (supported_stages & VK_SHADER_STAGE_RAYGEN_BIT_KHR) {
+		flags += SHADER_STAGE_RAYGEN_BIT;
+	}
+	if (supported_stages & VK_SHADER_STAGE_ANY_HIT_BIT_KHR) {
+		flags += SHADER_STAGE_ANY_HIT_BIT;
+	}
+	if (supported_stages & VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR) {
+		flags += SHADER_STAGE_CLOSEST_HIT_BIT;
+	}
+	if (supported_stages & VK_SHADER_STAGE_MISS_BIT_KHR) {
+		flags += SHADER_STAGE_MISS_BIT;
+	}
+	if (supported_stages & VK_SHADER_STAGE_INTERSECTION_BIT_KHR) {
+		flags += SHADER_STAGE_INTERSECTION_BIT;
+	}
 
 	return flags;
 }
@@ -3638,6 +3653,11 @@ static VkShaderStageFlagBits RD_STAGE_TO_VK_SHADER_STAGE_BITS[RDD::SHADER_STAGE_
 	VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
 	VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
 	VK_SHADER_STAGE_COMPUTE_BIT,
+	VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+	VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+	VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+	VK_SHADER_STAGE_MISS_BIT_KHR,
+	VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
 };
 
 RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) {
@@ -3947,6 +3967,13 @@ VkDescriptorPool RenderingDeviceDriverVulkan::_descriptor_set_pool_find_or_creat
 			curr_vk_size++;
 			vk_sizes_count++;
 		}
+		if (p_key.uniform_type[UNIFORM_TYPE_ACCELERATION_STRUCTURE]) {
+			*curr_vk_size = {};
+			curr_vk_size->type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+			curr_vk_size->descriptorCount = p_key.uniform_type[UNIFORM_TYPE_ACCELERATION_STRUCTURE] * max_descriptor_sets_per_pool;
+			curr_vk_size++;
+			vk_sizes_count++;
+		}
 		DEV_ASSERT(vk_sizes_count <= UNIFORM_TYPE_MAX);
 	}
 
@@ -4163,6 +4190,18 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 				vk_writes[writes_amount].pImageInfo = vk_img_infos;
+			} break;
+			case UNIFORM_TYPE_ACCELERATION_STRUCTURE: {
+				const AccelerationStructureInfo *acceleration_info = (const AccelerationStructureInfo *)uniform.ids[0].id; // TODO: Is this okay to only take the first index?
+
+				VkWriteDescriptorSetAccelerationStructureKHR *acceleration_write = ALLOCA_SINGLE(VkWriteDescriptorSetAccelerationStructureKHR);
+				acceleration_write = {};
+				acceleration_write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+				acceleration_write->accelerationStructureCount = 1;
+				acceleration_write->pAccelerationStructures = &acceleration_info->vk_acceleration_structure;
+
+				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+				vk_writes[writes_amount].pNext = acceleration_write;
 			} break;
 			default: {
 				DEV_ASSERT(false);
