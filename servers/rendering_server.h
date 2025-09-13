@@ -705,6 +705,16 @@ public:
 
 	virtual void decals_set_filter(DecalFilter p_quality) = 0;
 
+	/* RAYTRACING API */
+
+	virtual RID ray_tracer_create() = 0;
+
+	virtual bool ray_tracer_get_shadows(RID p_ray_tracer) const = 0;
+
+	virtual void ray_tracer_set_shadows(RID p_ray_tracer, bool p_enable) = 0;
+
+	virtual void on_settings_changed() = 0;
+
 	/* VOXEL GI API */
 
 	virtual RID voxel_gi_create() = 0;
