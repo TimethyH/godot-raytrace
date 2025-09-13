@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  renderer_ray_tracing.h                                                  */
+/*  renderer_ray_trace_settings.h                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,20 +30,22 @@
 
 #pragma once
 
-#include "servers/rendering_server.h"
+#include "core/object/object.h"
 
-class RendererRayTracer {
+class RendererRayTraceSettings : public Object {
 public:
-	virtual ~RendererRayTracer() {}
+	RendererRayTraceSettings();
+	virtual ~RendererRayTraceSettings() {}
 
-	/* RAYTRACING API */
+	bool get_shadows() const;
+	void set_shadows(bool p_enable);
 
-	virtual bool ray_tracer_get_shadows() const = 0;
-	virtual void ray_tracer_set_shadows(bool p_enable) = 0;
+	void on_settings_changed();
 
-	virtual void on_settings_changed() = 0;
+	static RendererRayTraceSettings *get_singleton();
 
-	virtual RID ray_tracer_allocate() = 0;
-	virtual void ray_tracer_initialize(RID p_rid) = 0;
-	virtual void ray_tracer_free(RID p_rid) = 0;
+private:
+	static RendererRayTraceSettings *singleton;
+
+	bool enable_shadows = false;
 };

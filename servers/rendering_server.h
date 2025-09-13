@@ -38,6 +38,7 @@
 #include "core/variant/variant.h"
 #include "servers/display_server.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/raytracing/renderer_ray_trace_settings.h"
 
 // Helper macros for code outside of the rendering server, but that is
 // called by the rendering server.
@@ -704,16 +705,6 @@ public:
 	};
 
 	virtual void decals_set_filter(DecalFilter p_quality) = 0;
-
-	/* RAYTRACING API */
-
-	virtual RID ray_tracer_create() = 0;
-
-	virtual bool ray_tracer_get_shadows(RID p_ray_tracer) const = 0;
-
-	virtual void ray_tracer_set_shadows(RID p_ray_tracer, bool p_enable) = 0;
-
-	virtual void on_settings_changed() = 0;
 
 	/* VOXEL GI API */
 

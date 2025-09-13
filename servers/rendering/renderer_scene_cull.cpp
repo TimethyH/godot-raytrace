@@ -35,6 +35,8 @@
 #include "rendering_light_culler.h"
 #include "rendering_server_default.h"
 
+#include "raytracing/renderer_ray_trace_settings.h"
+
 #if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
 // This is used only to obtain node paths for user-friendly physics interpolation warnings.
 #include "scene/main/node.h"
@@ -2704,7 +2706,8 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	bool using_shadows = !RendererRayTraceSettings::get_singleton()->get_shadows();
+	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, using_shadows, r_render_info);
 #endif
 }
 
@@ -3105,8 +3108,6 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
-
-	bool raytracedShadows = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
 
 	ERR_FAIL_COND(p_render_buffers.is_null());
 

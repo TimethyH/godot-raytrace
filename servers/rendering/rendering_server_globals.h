@@ -42,6 +42,7 @@
 #include "servers/rendering/storage/particles_storage.h"
 #include "servers/rendering/storage/texture_storage.h"
 #include "servers/rendering/storage/utilities.h"
+#include "servers/rendering/raytracing/renderer_ray_trace_settings.h"
 
 class RendererCanvasCull;
 class RendererViewport;
@@ -66,6 +67,8 @@ public:
 	static RendererCanvasCull *canvas;
 	static RendererViewport *viewport;
 	static RenderingMethod *scene;
+
+	static RendererRayTraceSettings *ray_trace_settings;
 };
 
 #define RSG RenderingServerGlobals

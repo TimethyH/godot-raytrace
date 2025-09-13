@@ -535,11 +535,6 @@ public:
 	FUNC3(decal_set_fade, RID, float, float)
 	FUNC2(decal_set_normal_fade, RID, float)
 
-	/* RAYTRACING API */
-
-	FUNCRIDSPLIT(ray_tracer)
-
-
 	/* BAKED LIGHT API */
 
 //from now on, calls forwarded to this singleton
