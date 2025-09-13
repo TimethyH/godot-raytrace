@@ -40,8 +40,6 @@ public:
 	bool get_shadows() const;
 	void set_shadows(bool p_enable);
 
-	void on_settings_changed();
-
 	static RendererRayTraceSettings *get_singleton();
 
 private:

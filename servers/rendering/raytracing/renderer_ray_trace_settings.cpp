@@ -36,11 +36,9 @@ RendererRayTraceSettings *RendererRayTraceSettings::singleton = nullptr;
 RendererRayTraceSettings::RendererRayTraceSettings() {
 	if (singleton == nullptr) {
 		singleton = this;
+
+		enable_shadows = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
 	}
-
-	ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &RendererRayTraceSettings::on_settings_changed));
-
-	enable_shadows = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
 }
 
 bool RendererRayTraceSettings::get_shadows() const {
@@ -51,17 +49,6 @@ void RendererRayTraceSettings::set_shadows(bool p_enable) {
 	enable_shadows = p_enable;
 }
 
-void RendererRayTraceSettings::on_settings_changed() {
-	bool new_shadows_setting = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
-
-	if (enable_shadows != new_shadows_setting)
-	{
-		enable_shadows = new_shadows_setting;
-	}
-}
-
 RendererRayTraceSettings *RendererRayTraceSettings::get_singleton() {
 	return singleton;
 }
-
-
