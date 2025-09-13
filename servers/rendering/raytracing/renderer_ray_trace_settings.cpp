@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  renderer_ray_tracing_rd.cpp                                           */
+/*  renderer_ray_trace_settings.cpp                                       */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,26 +28,30 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "renderer_ray_tracing_rd.h"
+#include "renderer_ray_trace_settings.h"
 #include "core/config/project_settings.h"
 
-RayTracer::RayTracer() {
-	singleton = this;
+RendererRayTraceSettings *RendererRayTraceSettings::singleton = nullptr;
 
-	ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &RayTracer::on_settings_changed));
+RendererRayTraceSettings::RendererRayTraceSettings() {
+	if (singleton == nullptr) {
+		singleton = this;
+	}
+
+	ProjectSettings::get_singleton()->connect("settings_changed", callable_mp(this, &RendererRayTraceSettings::on_settings_changed));
 
 	enable_shadows = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
 }
 
-bool RayTracer::ray_tracer_get_shadows() const {
+bool RendererRayTraceSettings::get_shadows() const {
 	return enable_shadows;
 }
 
-void RayTracer::ray_tracer_set_shadows(bool p_enable) {
+void RendererRayTraceSettings::set_shadows(bool p_enable) {
 	enable_shadows = p_enable;
 }
 
-void RayTracer::on_settings_changed() {
+void RendererRayTraceSettings::on_settings_changed() {
 	bool new_shadows_setting = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
 
 	if (enable_shadows != new_shadows_setting)
@@ -55,3 +59,9 @@ void RayTracer::on_settings_changed() {
 		enable_shadows = new_shadows_setting;
 	}
 }
+
+RendererRayTraceSettings *RendererRayTraceSettings::get_singleton() {
+	return singleton;
+}
+
+
