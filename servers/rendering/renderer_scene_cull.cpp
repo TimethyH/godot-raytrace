@@ -3492,10 +3492,12 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
 	}
 
-	for (uint32_t i = 0; i < max_shadows_used; i++) {
-		render_shadow_data[i].instances.clear();
+	if (p_using_shadows) {
+		for (uint32_t i = 0; i < max_shadows_used; i++) {
+			render_shadow_data[i].instances.clear();
+		}
+		max_shadows_used = 0;
 	}
-	max_shadows_used = 0;
 
 	for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 		render_sdfgi_data[i].instances.clear();
