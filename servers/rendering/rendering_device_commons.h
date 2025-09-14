@@ -757,6 +757,12 @@ public:
 		BLEND_OP_MAX
 	};
 
+	enum PipelineType {
+		RASTERIZATION,
+		COMPUTE,
+		RAYTRACING
+	};
+
 	struct PipelineRasterizationState {
 		bool enable_depth_clamp = false;
 		bool discard_primitives = false;
@@ -1071,7 +1077,7 @@ public:
 	struct ShaderReflection {
 		uint64_t vertex_input_mask = 0;
 		uint32_t fragment_output_mask = 0;
-		bool is_compute = false;
+		PipelineType pipeline_type = RASTERIZATION;
 		bool has_multiview = false;
 		uint32_t compute_local_size[3] = {};
 		uint32_t push_constant_size = 0;

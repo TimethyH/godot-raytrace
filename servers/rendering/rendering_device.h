@@ -789,6 +789,7 @@ public:
 	enum BufferCreationBits {
 		BUFFER_CREATION_DEVICE_ADDRESS_BIT = (1 << 0),
 		BUFFER_CREATION_AS_STORAGE_BIT = (1 << 1),
+		BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 2),
 	};
 
 	enum StorageBufferUsage {
