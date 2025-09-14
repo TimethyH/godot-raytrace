@@ -829,6 +829,8 @@ public:
 	// in order to avoid costly rebinds.
 
 private:
+	BitField<RDD::BufferUsageBits> _creation_to_usage_bits(BitField<BufferCreationBits> p_creation_bits);
+
 	struct UniformSetFormat {
 		Vector<ShaderUniform> uniforms;
 
