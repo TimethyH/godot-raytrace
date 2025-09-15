@@ -4432,7 +4432,7 @@ RID RenderingDevice::create_blas(RID p_vertex_array, RID p_index_array, BitField
 		geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
 	}
 
-	acceleration_struct.driver_id = driver->create_blas(vert_array->buffers[0], index_buffer, geometry_bits);
+	acceleration_struct.driver_id = driver->create_blas(vert_array->buffers[0], index_buffer, vert_format, index_offset, vert_array->offsets[0], vert_array->vertex_count, index_count, index_format,  geometry_bits);
 	ERR_FAIL_COND_V_MSG(!acceleration_struct.driver_id, RID(), "Failed to create BLAS");
 	acceleration_struct.vertex_array = p_vertex_array;
 	acceleration_struct.index_array = p_index_array;

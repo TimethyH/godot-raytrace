@@ -560,7 +560,7 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	virtual AccelerationStructureID create_blas() = 0;
+	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint32_t p_index_offset, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, BitField<GeometryBits> p_geobits) = 0;
 	
 
 	// ----- BINDING -----
