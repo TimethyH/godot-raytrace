@@ -1205,6 +1205,48 @@ public:
 	FramebufferFormatID screen_get_framebuffer_format(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID) const;
 	Error screen_free(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID);
 
+
+
+private:
+	// ------------ ACCELERATION STRUCTURE --------------------------
+
+	struct InstancesBuffer {
+		Buffer buffer;
+		uint32_t instance_count;
+		Vector<RID> blasses;
+	};
+
+	struct AccelerationStructure {
+		RDD::AccelerationStructureID driver_id;
+		RDD::AccelerationStructureType type = RDD::ACCELERATION_STRUCTURE_TYPE_BLAS;
+		RDD::BufferID scratch_buffer;
+		RDG::ResourceTracker* draw_tracker = nullptr;
+
+		RID vertex_array;
+		RID index_array;
+		RID transform_buffer;
+		RID instances_buffer;
+	};
+
+	//RID_Owner<InstancesBuffer, true> instances_buffer_owner;
+	RID_Owner<AccelerationStructure> acceleration_structure_owner;
+
+public:
+	enum GeometryBits {
+		GEOMETRY_OPAQUE = (1 << 0),
+		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
+	};
+
+	RID create_blas();
+	RID create_tlas();
+	RID create_tlas_instances_buffer();
+	void fill_tlas_instances();
+	Error build_acceleration_structure();
+
+
+
+
+
 	/*************************/
 	/**** DRAW LISTS (II) ****/
 	/*************************/

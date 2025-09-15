@@ -5313,6 +5313,10 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 
 // ----- RAY TRACING -----
 
+static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_OPAQUE, VK_GEOMETRY_OPAQUE_BIT_KHR));
+static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
+
+
 RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer,
 	VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset,
 	uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) {

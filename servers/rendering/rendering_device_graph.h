@@ -150,6 +150,9 @@ public:
 		RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE,
 		RESOURCE_USAGE_ATTACHMENT_FRAGMENT_SHADING_RATE_READ,
 		RESOURCE_USAGE_ATTACHMENT_FRAGMENT_DENSITY_MAP_READ,
+		RESOURCE_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT,
+		RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ,
+		RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE,
 		RESOURCE_USAGE_GENERAL,
 		RESOURCE_USAGE_MAX
 	};
@@ -171,6 +174,7 @@ public:
 		RDD::BufferID buffer_driver_id;
 		RDD::TextureID texture_driver_id;
 		RDD::TextureSubresourceRange texture_subresources;
+		RDD::AccelerationStructureID acceleration_structure_driver_id;
 		Size2i texture_size;
 		uint32_t texture_usage = 0;
 		int32_t texture_slice_command_index = -1;

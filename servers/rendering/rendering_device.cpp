@@ -4395,6 +4395,56 @@ Error RenderingDevice::screen_free(DisplayServer::WindowID p_screen) {
 	return OK;
 }
 
+// ---------------------- ACCELERATION STRUCTURE -------------------
+
+
+RID RenderingDevice::create_blas(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits) {
+	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "Rendering device does not support RayTracing..");
+
+	VertexArray* vert_array = vertex_array_owner.get_or_null(p_vertex_array);
+	ERR_FAIL_NULL_V(vert_array, RID());
+	RDD::VertexFormatID vert_format;
+	if(vert_array->description != INVALID_ID) {
+		ERR_FAIL_COND_V(!vertex_formats.has(vert_array->description), RID());
+		vert_format = vertex_formats[vert_array->description].driver_id;
+	}
+
+	IndexArray* index_array = index_array_owner.get_or_null(p_index_array);
+	RDD::BufferID index_buffer = RDD::BufferID();
+	IndexBufferFormat index_format = INDEX_BUFFER_FORMAT_UINT32;
+	uint32_t index_offset = 0;
+	uint32_t index_count = 0;
+	if(index_array) {
+		index_buffer = index_array->driver_id;
+		index_format = index_array->format;
+		index_offset = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+		index_count = index_array->indices;
+	}
+
+	AccelerationStructure acceleration_struct;
+	acceleration_struct.type = RenderingDeviceDriver::ACCELERATION_STRUCTURE_TYPE_BLAS;
+
+	BitField<RDD::GeometryBits> geometry_bits = 0;
+	if (p_geobits.has_flag(GEOMETRY_OPAQUE)) {
+		geometry_bits.set_flag(RDD::GEOMETRY_OPAQUE);
+	}
+	if (p_geobits.has_flag(GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION)) {
+		geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
+	}
+
+	acceleration_struct.driver_id = driver->create_blas(vert_array->buffers[0], index_buffer, geometry_bits);
+	ERR_FAIL_COND_V_MSG(!acceleration_struct.driver_id, RID(), "Failed to create BLAS");
+	acceleration_struct.vertex_array = p_vertex_array;
+	acceleration_struct.index_array = p_index_array;
+	acceleration_struct.draw_tracker = RDG::resource_tracker_create();
+	acceleration_struct.draw_tracker->acceleration_structure_driver_id = acceleration_struct.driver_id;
+	acceleration_struct.draw_tracker->usage = RDG::RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE;
+
+	RID id = acceleration_structure_owner.make_rid(acceleration_struct);
+
+	return id;
+}
+
 /*******************/
 /**** DRAW LIST ****/
 /*******************/

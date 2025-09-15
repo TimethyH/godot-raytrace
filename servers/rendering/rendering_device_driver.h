@@ -548,6 +548,21 @@ public:
 
 	virtual void pipeline_free(PipelineID p_pipeline) = 0;
 
+	// ----- RAY TRACING -----
+
+	enum AccelerationStructureType {
+		ACCELERATION_STRUCTURE_TYPE_BLAS,
+		ACCELERATION_STRUCTURE_TYPE_TLAS
+	};
+
+	enum GeometryBits {
+		GEOMETRY_OPAQUE = (1 << 0),
+		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
+	};
+
+	virtual AccelerationStructureID create_blas() = 0;
+	
+
 	// ----- BINDING -----
 
 	virtual void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_first_index, VectorView<uint32_t> p_data) = 0;
