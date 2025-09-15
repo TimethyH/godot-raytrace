@@ -1625,6 +1625,33 @@ void RenderingDeviceGraph::begin() {
 #endif
 }
 
+void RenderingDeviceGraph::add_acceleration_structure_build(RDD::AccelerationStructureID p_acceleration_structure, RDD::BufferID p_scratch_buffer, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers) {
+	int32_t command_index;
+
+	RecordedAccelerationStructureBuildCommand *command = static_cast<RecordedAccelerationStructureBuildCommand *>(_allocate_command(sizeof(RecordedAccelerationStructureBuildCommand), command_index));
+	command->type = RecordedCommand::TYPE_ACCELERATION_STRUCTURE_BUILD;
+	command->self_stages = RDD::PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT;
+	command->acceleration_structure = p_acceleration_structure;
+	command->scratch_buffer = p_scratch_buffer;
+
+	thread_local LocalVector<ResourceTracker *> trackers;
+	thread_local LocalVector<ResourceUsage> usages;
+
+	uint32_t resource_count = p_src_trackers.size() + 1;
+	trackers.resize(resource_count);
+	usages.resize(resource_count);
+
+	for (uint32_t i = 0; i < p_src_trackers.size(); ++i) {
+		trackers[i] = p_src_trackers[i];
+		usages[i] = RESOURCE_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT;
+	}
+
+	trackers[resource_count - 1] = p_dst_tracker;
+	usages[resource_count - 1] = RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE;
+
+	_add_command_to_graph(trackers.ptr(), usages.ptr(), usages.size(), command_index, command);
+}
+
 void RenderingDeviceGraph::add_buffer_clear(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_offset, uint32_t p_size) {
 	DEV_ASSERT(p_dst_tracker != nullptr);
 

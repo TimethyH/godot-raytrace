@@ -99,6 +99,7 @@ public:
 			TYPE_TEXTURE_UPDATE,
 			TYPE_CAPTURE_TIMESTAMP,
 			TYPE_DRIVER_CALLBACK,
+			TYPE_ACCELERATION_STRUCTURE_BUILD,
 			TYPE_MAX
 		};
 
@@ -360,6 +361,11 @@ private:
 		_FORCE_INLINE_ const uint8_t *instruction_data() const {
 			return reinterpret_cast<const uint8_t *>(&this[1]);
 		}
+	};
+
+	struct RecordedAccelerationStructureBuildCommand : RecordedCommand {
+		RDD::AccelerationStructureID acceleration_structure;
+		RDD::BufferID scratch_buffer;
 	};
 
 	struct RecordedDrawListCommand : RecordedCommand {
@@ -775,6 +781,7 @@ public:
 	void initialize(RDD *p_driver, RenderingContextDriver::Device p_device, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame);
 	void finalize();
 	void begin();
+	void add_acceleration_structure_build(RDD::AccelerationStructureID p_acceleration_structure, RDD::BufferID p_scratch_buffer, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_buffer_clear(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_offset, uint32_t p_size);
 	void add_buffer_copy(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, RDD::BufferCopyRegion p_region);
 	void add_buffer_get_data(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, RDD::BufferCopyRegion p_region);

@@ -4445,6 +4445,134 @@ RID RenderingDevice::create_blas(RID p_vertex_array, RID p_index_array, BitField
 	return id;
 }
 
+RID RenderingDevice::create_tlas(RID p_instances_buffer) {
+	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "Rendering Device does not support raytracing :c");
+
+	const InstancesBuffer* instances_buffer = instances_buffer_owner.get_or_null(p_instances_buffer);
+	ERR_FAIL_NULL_V_MSG(instances_buffer, RID(), "The provided instance buffer is not valid.");
+
+	AccelerationStructure acceleration_structure;
+	acceleration_structure.type = RenderingDeviceDriver::ACCELERATION_STRUCTURE_TYPE_TLAS;
+	acceleration_structure.driver_id = driver->create_tlas(instances_buffer->buffer.driver_id);
+	ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to generate TLAS");
+	acceleration_structure.instances_buffer = p_instances_buffer;
+
+	acceleration_structure.draw_tracker = RDG::resource_tracker_create();
+	acceleration_structure.draw_tracker->acceleration_structure_driver_id = acceleration_structure.driver_id;
+	acceleration_structure.draw_tracker->usage = RDG::RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE;
+
+	RID id = acceleration_structure_owner.make_rid(acceleration_structure);
+	return id;
+}
+
+RID RenderingDevice::create_tlas_instances_buffer(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits) {
+	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "Rendering Device does not support RayTracing :/");
+
+	uint32_t instances_buffer_size_bytes = driver->get_tlas_instances_buffer_size(p_instance_count);
+
+	InstancesBuffer instances_buffer;
+	instances_buffer.instance_count = p_instance_count;
+	instances_buffer.buffer.size = instances_buffer_size_bytes;
+	instances_buffer.buffer.usage = _creation_to_usage_bits(p_creation_bits) | RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT | RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT;
+	instances_buffer.buffer.driver_id = driver->buffer_create(instances_buffer.buffer.size, instances_buffer.buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_CPU );
+	ERR_FAIL_COND_V_MSG(!instances_buffer.buffer.driver_id, RID(), "Failed to create instance buffer");
+
+	_THREAD_SAFE_LOCK_
+	buffer_memory += instances_buffer.buffer.size;
+	_THREAD_SAFE_LOCK_
+
+	RID id = instances_buffer_owner.make_rid(instances_buffer);
+	return id;
+}
+
+void RenderingDevice::fill_tlas_instances(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms) {
+	ERR_FAIL_COND_MSG(!has_feature(SUPPORTS_RAYTRACING), "Rendering Device does not support raytracing");
+
+	InstancesBuffer *instance_buffer = instances_buffer_owner.get_or_null(p_instances_buffer);
+	ERR_FAIL_NULL_MSG(instance_buffer, "Provided instances buffer is not valid");
+
+	uint32_t blas_count = p_blasses.size();
+	ERR_FAIL_COND_MSG(blas_count != instance_buffer->instance_count, "The number of blases is not equal to the instance count of the instances buffer.");
+
+	thread_local LocalVector<RDD::AccelerationStructureID> blasses;
+	blasses.resize(blas_count);
+
+	for (uint32_t i = 0; i < blas_count; ++i) {
+		const AccelerationStructure *blas = acceleration_structure_owner.get_or_null(p_blasses[i]);
+		ERR_FAIL_NULL_MSG(blas, "Provided BLAS is not valid");
+		blasses[i] = blas->driver_id;
+	}
+
+	instance_buffer->blasses = p_blasses;
+	driver->fill_tlas_buffer_instances(instance_buffer->buffer.driver_id, blasses, p_transforms);
+
+}
+
+Error RenderingDevice::build_acceleration_structure(RID p_acceleration_structure) {
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE); // huh?
+
+	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER,
+			"Building acceleration structures is forbidden during creation of a draw list.");
+	ERR_FAIL_COND_V_MSG(compute_list.active, ERR_INVALID_PARAMETER,
+			"Building acceleration structures is forbidden during creation of a compute list.");
+	ERR_FAIL_COND_V_MSG(raytracing_list.active, ERR_INVALID_PARAMETER,
+			"Building acceleration structures is forbidden during creation of a raytracing list.");
+
+
+	AccelerationStructure *acceleration_structure = acceleration_structure_owner.get_or_null(p_acceleration_structure);
+	ERR_FAIL_NULL_V_MSG(acceleration_structure, ERR_INVALID_PARAMETER, "Acceleration structure provided is not valid");
+
+	Vector<RDG::ResourceTracker *> src_trackers;
+	switch (acceleration_structure->type) {
+		case RDD::ACCELERATION_STRUCTURE_TYPE_BLAS: {
+			VertexArray *vertex_array = vertex_array_owner.get_or_null(acceleration_structure->vertex_array);
+			ERR_FAIL_NULL_V_MSG(vertex_array, ERR_INVALID_PARAMETER, "The provided vertex array is not valid.");
+			src_trackers.append_array(vertex_array->draw_trackers);
+			_check_transfer_worker_vertex_array(vertex_array);
+
+			IndexArray *index_array = index_array_owner.get_or_null(acceleration_structure->index_array);
+			if (index_array && index_array->draw_tracker) {
+				src_trackers.append(index_array->draw_tracker);
+			}
+			_check_transfer_worker_index_array(index_array);
+		} break;
+		case RDD::ACCELERATION_STRUCTURE_TYPE_TLAS: {
+			const InstancesBuffer *instances_buffer = instances_buffer_owner.get_or_null(acceleration_structure->instances_buffer);
+			ERR_FAIL_NULL_V_MSG(instances_buffer, ERR_INVALID_PARAMETER, "Instance buffer provided was not valid");
+
+			for (Vector<RID>::ConstIterator itr = instances_buffer->blasses.begin(); itr != instances_buffer->blasses.end()) {
+				const AccelerationStructure* blas = acceleration_structure_owner.get_or_null(*itr);
+				ERR_FAIL_NULL_V_MSG(blas, ERR_INVALID_PARAMETER, "BLAS input is not valid.");
+
+				if(blas->draw_tracker) {
+					src_trackers.append(blas->draw_tracker);
+				}
+			}
+
+		} break;
+
+		default:
+			ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Invalid Acceleration Structure Type");
+	}
+
+	uint64_t scratch_size = driver->get_acceleration_structure_scratch_size(acceleration_structure->driver_id);
+	if (acceleration_structure->scratch_buffer && driver->buffer_get_allocation_size(acceleration_structure->scratch_buffer) < scratch_size) {
+		// the buffer we had is too small, so we clear it and set it to an empty handlee
+		driver->buffer_free(acceleration_structure->scratch_buffer);
+		acceleration_structure->scratch_buffer = RDD::BufferID();
+	}
+
+	if (!acceleration_structure->scratch_buffer) {
+		//no previous buffer or we cleared it above
+		acceleration_structure->scratch_buffer = driver->buffer_create(scratch_size, RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU);
+		ERR_FAIL_COND_V(!acceleration_structure->scratch_buffer, ERR_CANT_CREATE);
+	}
+
+	draw_graph.add_acceleration_structure_build(acceleration_structure->driver_id, acceleration_structure->scratch_buffer, acceleration_structure->draw_tracker, src_trackers );
+
+	return OK;
+}
+
 /*******************/
 /**** DRAW LIST ****/
 /*******************/

@@ -316,6 +316,7 @@ public:
 		PIPELINE_STAGE_CLEAR_STORAGE_BIT = (1 << 17),
 		PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT = (1 << 22),
 		PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT = (1 << 23),
+		PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (1 << 24), // original code has 2 << 24, but i dont see the reason for this?..
 	};
 
 	enum BarrierAccessBits {
@@ -561,8 +562,10 @@ public:
 	};
 
 	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint32_t p_index_offset, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, BitField<GeometryBits> p_geobits) = 0;
-	
-
+	virtual AccelerationStructureID create_tlas(BufferID p_instance_buffer) = 0;
+	virtual void fill_tlas_buffer_instances(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blasses, const Vector<Transform3D> &p_transforms) = 0;
+	virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
+	virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
 	// ----- BINDING -----
 
 	virtual void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_first_index, VectorView<uint32_t> p_data) = 0;

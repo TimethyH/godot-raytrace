@@ -1228,7 +1228,7 @@ private:
 		RID instances_buffer;
 	};
 
-	//RID_Owner<InstancesBuffer, true> instances_buffer_owner;
+	RID_Owner<InstancesBuffer, true> instances_buffer_owner;
 	RID_Owner<AccelerationStructure> acceleration_structure_owner;
 
 public:
@@ -1237,15 +1237,11 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	RID create_blas();
-	RID create_tlas();
-	RID create_tlas_instances_buffer();
-	void fill_tlas_instances();
-	Error build_acceleration_structure();
-
-
-
-
+	RID create_blas(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
+	RID create_tlas(RID p_instances_buffer);
+	RID create_tlas_instances_buffer(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
+	void fill_tlas_instances(RID p_instances_buffer, const Vector<RID>& p_blasses, const Vector<Transform3D>& p_transforms);
+	Error build_acceleration_structure(RID p_acceleration_structure);
 
 	/*************************/
 	/**** DRAW LISTS (II) ****/
@@ -1439,6 +1435,36 @@ public:
 	void compute_list_add_barrier(ComputeListID p_list);
 
 	void compute_list_end();
+
+
+	// ----------- RAY TRACING LIST -----------
+
+	struct RayTracingList {
+		bool active = false;
+		struct SetState {
+			uint32_t pipeline_expected_format = 0;
+			uint32_t uniform_set_format = 0;
+			RDD::UniformSetID uniform_set_driver_id;
+			RID uniform_set;
+			bool bound = false;
+		};
+
+		struct State {
+			SetState sets[MAX_UNIFORM_SETS];
+			uint32_t set_count = 0;
+			RID pipeline;
+			RDD::RayTracingPipelineID pipeline_driver_id;
+			RID pipeline_shader;
+			RDD::ShaderID pipeline_shader_driver_id;
+			uint32_t pipeline_shader_layout_hash = 0;
+			uint8_t push_constant_data[MAX_PUSH_CONSTANT_SIZE] = {};
+			uint32_t push_constant_size = 0;
+			uint32_t trace_count = 0;
+		} state;
+	};
+
+	RayTracingList raytracing_list;
+	RayTracingList::State raytracing_list_barrier_state;
 
 private:
 	/*************************/
