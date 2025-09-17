@@ -99,6 +99,10 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 
 	struct RayTracingCapabilities {
 		bool raytracing_supported = false;
+		uint32_t shader_group_handle_size = 0;
+		uint32_t shader_group_handle_alignment = 0;
+		uint32_t shader_group_handle_size_aligned = 0;
+		uint32_t shader_group_base_alignment = 0;
 	};
 
 	struct DeviceFunctions {
@@ -424,11 +428,21 @@ public:
 	/**** SHADER ****/
 	/****************/
 private:
+	struct RaytracingShaderRegionCount {
+		uint32_t raygen_count = 0;
+		uint32_t hit_count = 0;
+		uint32_t miss_count = 0;
+		uint32_t group_count = 0;
+	};
+
 	struct ShaderInfo {
 		VkShaderStageFlags vk_push_constant_stages = 0;
 		TightLocalVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
 		TightLocalVector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
 		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
+
+		// Used to update the shader binding table buffer.
+		RaytracingShaderRegionCount region_count;
 	};
 
 public:
@@ -632,13 +646,11 @@ public:
 		LocalVector<VkAccelerationStructureInstanceKHR> instances;
 	};
 
-	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) override final; 
-	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_acceleration_info, VkAccelerationStructureTypeKHR
-			p_type);
+	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) override final;
+	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_acceleration_info, VkAccelerationStructureTypeKHR p_type);
 	virtual void build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer);
 	virtual RDD::AccelerationStructureID create_tlas(BufferID p_instance_buffer) override final;
-	virtual void fill_tlas_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID
-			p_instance_buffer) override final;
+	virtual void fill_tlas_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) override final;
 	// To implement:
 	// Free acceleration struct
 	// get acceleration scratch size in byes
@@ -661,7 +673,27 @@ public:
 
 	// ----- PIPELINE -----
 
+private:
+	struct RaytracingShaderRegions {
+		VkStridedDeviceAddressRegionKHR raygen;
+		VkStridedDeviceAddressRegionKHR hit;
+		VkStridedDeviceAddressRegionKHR miss;
+		VkStridedDeviceAddressRegionKHR call;
+	};
+
+	struct RaytracingPipelineInfo {
+		VkPipeline vk_pipeline = VK_NULL_HANDLE;
+		ShaderID shader;
+		// Used vkCmdTraceRaysKHR.
+		RaytracingShaderRegions regions;
+		// Shader binding table.
+		BufferID sbt_buffer;
+	};
+
+public:
 	virtual PipelineID compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
+
+	VkResult _raytracing_pipeline_stb_create(RayTracingPipelineID p_pipeline, ShaderID p_shader);
 
 	/*****************/
 	/**** QUERIES ****/
