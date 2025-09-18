@@ -67,12 +67,20 @@ private:
 public:
 	typedef int64_t DrawListID;
 	typedef int64_t ComputeListID;
-	typedef int64_t RaytracingListID;
+	typedef int64_t RayTracingListID;
+
+	typedef String (*ShaderSPIRVGetCacheKeyFunction)(const RenderingDevice *p_render_device);
+	typedef Vector<uint8_t> (*ShaderCompileToSPIRVFunction)(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language, String *r_error, const RenderingDevice *p_render_device);
+	typedef Vector<uint8_t> (*ShaderCacheFunction)(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language);
 
 	typedef void (*InvalidationCallback)(void *);
 
 private:
 	static RenderingDevice *singleton;
+	
+	static ShaderCompileToSPIRVFunction compile_to_spirv_function;
+	static ShaderCacheFunction cache_function;
+	static ShaderSPIRVGetCacheKeyFunction get_spirv_cache_key_function;
 
 	RenderingContextDriver *context = nullptr;
 	RenderingDeviceDriver *driver = nullptr;
@@ -246,6 +254,9 @@ public:
 		CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE,
 		CALLBACK_RESOURCE_USAGE_ATTACHMENT_FRAGMENT_SHADING_RATE_READ,
 		CALLBACK_RESOURCE_USAGE_ATTACHMENT_FRAGMENT_DENSITY_MAP_READ,
+		CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT,
+		CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ,
+		CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE,
 		CALLBACK_RESOURCE_USAGE_GENERAL,
 		CALLBACK_RESOURCE_USAGE_MAX
 	};
@@ -1182,12 +1193,26 @@ private:
 
 	RID_Owner<ComputePipeline, true> compute_pipeline_owner;
 
+	struct RayTracingPipeline {
+		RID shader;
+		RDD::ShaderID shader_driver_id;
+		uint32_t shader_layout_hash = 0;
+		Vector<uint32_t> set_formats;
+		RDD::RayTracingPipelineID driver_id;
+		uint32_t push_constant_size = 0;
+	};
+
+	RID_Owner<RayTracingPipeline> raytracing_pipeline_owner;
+
 public:
 	RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0, uint32_t p_for_render_pass = 0, const Vector<PipelineSpecializationConstant> &p_specialization_constants = Vector<PipelineSpecializationConstant>());
 	bool render_pipeline_is_valid(RID p_pipeline);
 
 	RID compute_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants = Vector<PipelineSpecializationConstant>());
 	bool compute_pipeline_is_valid(RID p_pipeline);
+
+	RID raytracing_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants = Vector<PipelineSpecializationConstant>());
+	bool raytracing_pipeline_is_valid(RID p_pipeline);
 
 private:
 	/****************/
@@ -1206,6 +1231,8 @@ public:
 	int screen_get_pre_rotation_degrees(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID) const;
 	FramebufferFormatID screen_get_framebuffer_format(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID) const;
 	Error screen_free(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID);
+	String get_shader_spirv_cache_key() const;
+	String get_shader_binary_cache_key() const;
 
 private:
 	// ------------ ACCELERATION STRUCTURE --------------------------
@@ -1594,6 +1621,8 @@ private:
 		List<UniformSet> uniform_sets_to_dispose_of;
 		List<RenderPipeline> render_pipelines_to_dispose_of;
 		List<ComputePipeline> compute_pipelines_to_dispose_of;
+		List<AccelerationStructure> acceleration_structures_to_dispose_of;
+		List<RayTracingPipeline> raytracing_pipelines_to_dispose_of;
 
 		// Pending asynchronous data transfer for buffers.
 		LocalVector<RDD::BufferID> download_buffer_staging_buffers;

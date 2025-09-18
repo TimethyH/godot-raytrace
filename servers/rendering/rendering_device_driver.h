@@ -482,6 +482,10 @@ public:
 	/**** SHADER ****/
 	/****************/
 
+
+	virtual String shader_get_binary_cache_key() = 0;
+	virtual Vector<uint8_t> shader_compile_binary_from_spirv(VectorView<ShaderStageSPIRVData> p_spirv, const String &p_shader_name) = 0;
+
 	struct ImmutableSampler {
 		UniformType type = UNIFORM_TYPE_MAX;
 		uint32_t binding = 0xffffffff; // Binding index as specified in shader.
@@ -576,8 +580,9 @@ public:
 	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) = 0;
 	virtual AccelerationStructureID create_tlas(BufferID p_instance_buffer) = 0;
 	virtual void fill_tlas_buffer_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) = 0;
-	//virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
-	//virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
+	virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
+	virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
+	virtual void free_acceleration_structure(AccelerationStructureID p_acceleration_structure) = 0;
 
 	virtual RayTracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) = 0;
 	virtual void raytracing_pipeline_free(RayTracingPipelineID p_pipeline) = 0;
