@@ -314,6 +314,7 @@ public:
 		PIPELINE_STAGE_ALL_GRAPHICS_BIT = (1 << 15),
 		PIPELINE_STAGE_ALL_COMMANDS_BIT = (1 << 16),
 		PIPELINE_STAGE_CLEAR_STORAGE_BIT = (1 << 17),
+		PIPELINE_STAGE_RAY_TRACING_SHADER_BIT = (1 << 20), // tutorial has 2 << 20 but this doesnt matter?
 		PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT = (1 << 22),
 		PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT = (1 << 23),
 		PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (1 << 24), // original code has 2 << 24, but i dont see the reason for this?..
@@ -470,6 +471,10 @@ public:
 	/**** SHADER ****/
 	/****************/
 
+
+	virtual String shader_get_binary_cache_key() = 0;
+	virtual Vector<uint8_t> shader_compile_binary_from_spirv(VectorView<ShaderStageSPIRVData> p_spirv, const String &p_shader_name) = 0;
+
 	struct ImmutableSampler {
 		UniformType type = UNIFORM_TYPE_MAX;
 		uint32_t binding = 0xffffffff; // Binding index as specified in shader.
@@ -566,6 +571,14 @@ public:
 	virtual void fill_tlas_buffer_instances(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blasses, const Vector<Transform3D> &p_transforms) = 0;
 	virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
 	virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
+	virtual void free_acceleration_structure(AccelerationStructureID p_acceleration_structure) = 0;
+
+	// ----- PIPELINE -----
+
+	virtual RayTracingPipelineID create_raytracing_pipeline(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) = 0;
+	virtual void free_raytracing_pipeline(RayTracingPipelineID p_pipeline) = 0;
+
+
 	// ----- BINDING -----
 
 	virtual void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_first_index, VectorView<uint32_t> p_data) = 0;
@@ -767,6 +780,8 @@ public:
 		OBJECT_TYPE_SHADER,
 		OBJECT_TYPE_UNIFORM_SET,
 		OBJECT_TYPE_PIPELINE,
+		OBJECT_TYPE_ACCELERATION_STRUCTURE,
+		OBJECT_TYPE_RAYTRACING_PIPELINE,
 	};
 
 	struct MultiviewCapabilities {

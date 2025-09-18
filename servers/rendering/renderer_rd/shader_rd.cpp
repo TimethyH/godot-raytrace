@@ -206,9 +206,9 @@ void ShaderRD::setup_raytracing(const char *p_raygen_code, const char *p_closest
 	tohash.append("[GODOT_VERSION_HASH]");
 	tohash.append(GODOT_VERSION_HASH);
 	tohash.append("[SpirvCacheKey]");
-	tohash.append(RenderingDevice::get_singleton()->shader_get_spirv_cache_key()); // huh?
+	tohash.append(RenderingDevice::get_singleton()->get_shader_spirv_cache_key()); // huh?
 	tohash.append("[BinaryCacheKey]");
-	tohash.append(RenderingDevice::get_singleton()->shader_get_binary_cache_key()); // huh?
+	tohash.append(RenderingDevice::get_singleton()->get_shader_binary_cache_key()); // huh?
 	tohash.append("[Raygen]");
 	tohash.append(p_raygen_code ? p_raygen_code : "");
 	tohash.append("[ClosestHit]");
@@ -568,6 +568,16 @@ String ShaderRD::_version_get_sha1(Version *p_version) const {
 	hash_build.append(p_version->fragment_globals.get_data());
 	hash_build.append("[compute_globals]");
 	hash_build.append(p_version->compute_globals.get_data());
+	hash_build.append("[raygen_globals]");
+	hash_build.append(p_version->raygen_globals.get_data());
+	hash_build.append("[any_hit_globals]");
+	hash_build.append(p_version->any_hit_globals.get_data());
+	hash_build.append("[closest_hit_globals]");
+	hash_build.append(p_version->closest_hit_globals.get_data());
+	hash_build.append("[miss_globals]");
+	hash_build.append(p_version->miss_globals.get_data());
+	hash_build.append("[intersection_globals]");
+	hash_build.append(p_version->intersection_globals.get_data());
 
 	Vector<StringName> code_sections;
 	for (const KeyValue<StringName, CharString> &E : p_version->code_sections) {
@@ -778,7 +788,7 @@ void ShaderRD::_compile_ensure_finished(Version *p_version) {
 }
 
 void ShaderRD::version_set_code(RID p_version, const HashMap<String, String> &p_code, const String &p_uniforms, const String &p_vertex_globals, const String &p_fragment_globals, const Vector<String> &p_custom_defines) {
-	ERR_FAIL_COND(is_compute);
+	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::RASTERIZATION);
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
@@ -815,7 +825,7 @@ void ShaderRD::version_set_code(RID p_version, const HashMap<String, String> &p_
 }
 
 void ShaderRD::version_set_compute_code(RID p_version, const HashMap<String, String> &p_code, const String &p_uniforms, const String &p_compute_globals, const Vector<String> &p_custom_defines) {
-	ERR_FAIL_COND(!is_compute);
+	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::COMPUTE);
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
@@ -828,6 +838,43 @@ void ShaderRD::version_set_compute_code(RID p_version, const HashMap<String, Str
 	version->uniforms = p_uniforms.utf8();
 
 	version->code_sections.clear();
+	for (const KeyValue<String, String> &E : p_code) {
+		version->code_sections[StringName(E.key.to_upper())] = E.value.utf8();
+	}
+
+	version->custom_defines.clear();
+	for (int i = 0; i < p_custom_defines.size(); i++) {
+		version->custom_defines.push_back(p_custom_defines[i].utf8());
+	}
+
+	version->dirty = true;
+	if (version->initialize_needed) {
+		_initialize_version(version);
+		for (int i = 0; i < group_enabled.size(); i++) {
+			if (!group_enabled[i]) {
+				_allocate_placeholders(version, i);
+				continue;
+			}
+			_compile_version_start(version, i);
+		}
+		version->initialize_needed = false;
+	}
+}
+
+void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, String> &p_code, const String &p_uniforms, const String &p_raygen_globals, const String &p_closest_hit_globals, const String &p_miss_globals, const String &p_any_hit_globals, const String &p_intersection_globals, const Vector<String> &p_custom_defines) {
+	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::RAYTRACING);
+
+	Version *version = version_owner.get_or_null(p_version);
+	ERR_FAIL_NULL(version);
+
+	version->raygen_globals = p_raygen_globals.utf8();
+	version->closest_hit_globals = p_closest_hit_globals.utf8();
+	version->miss_globals = p_miss_globals.utf8();
+	version->any_hit_globals = p_any_hit_globals.utf8();
+	version->intersection_globals = p_intersection_globals.utf8();
+	version->uniforms = p_uniforms.utf8();
+	version->code_sections.clear();
+
 	for (const KeyValue<String, String> &E : p_code) {
 		version->code_sections[StringName(E.key.to_upper())] = E.value.utf8();
 	}
@@ -1154,7 +1201,9 @@ Vector<RD::ShaderStageSPIRVData> ShaderRD::compile_stages(const Vector<String> &
 	}
 
 	if (compilation_failed) {
-		ERR_PRINT("Error compiling " + String(compilation_failed_stage == RD::SHADER_STAGE_COMPUTE ? "Compute " : (compilation_failed_stage == RD::SHADER_STAGE_VERTEX ? "Vertex" : "Fragment")) + " shader.");
+		ERR_PRINT("Error compiling " + String(compilation_failed_stage == RD::SHADER_STAGE_COMPUTE ? "Compute " : (compilation_failed_stage == RD::SHADER_STAGE_VERTEX ? "Vertex" : compilation_failed_stage == RD::SHADER_STAGE_FRAGMENT ? "Fragment"
+																																																										  : "RayTrace")) +
+				" shader.");
 		ERR_PRINT(error);
 
 #ifdef DEBUG_ENABLED
