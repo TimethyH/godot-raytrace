@@ -102,6 +102,8 @@ bool RenderingDeviceGraph::_is_write_usage(ResourceUsage p_usage) {
 		case RESOURCE_USAGE_STORAGE_IMAGE_READ:
 		case RESOURCE_USAGE_ATTACHMENT_FRAGMENT_SHADING_RATE_READ:
 		case RESOURCE_USAGE_ATTACHMENT_FRAGMENT_DENSITY_MAP_READ:
+		case RESOURCE_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT:
+		case RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ:
 			return false;
 		case RESOURCE_USAGE_COPY_TO:
 		case RESOURCE_USAGE_RESOLVE_TO:
@@ -111,6 +113,7 @@ bool RenderingDeviceGraph::_is_write_usage(ResourceUsage p_usage) {
 		case RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE:
 		case RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE:
 		case RESOURCE_USAGE_GENERAL:
+		case RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE:
 			return true;
 		default:
 			DEV_ASSERT(false && "Invalid resource tracker usage.");
@@ -170,6 +173,12 @@ RDD::BarrierAccessBits RenderingDeviceGraph::_usage_to_access_bits(ResourceUsage
 			return RDD::BARRIER_ACCESS_UNIFORM_READ_BIT;
 		case RESOURCE_USAGE_INDIRECT_BUFFER_READ:
 			return RDD::BARRIER_ACCESS_INDIRECT_COMMAND_READ_BIT;
+		case RESOURCE_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT:
+			// Acceleration structure build inputs can be either storage buffers with vertices, indices, transforms, or
+			// other acceleration structures (BLAS)
+			return RDD::BarrierAccessBits(RDD::BARRIER_ACCESS_COPY_READ_BIT | RDD::BARRIER_ACCESS_ACCELERATION_STRUCTURE_READ_BIT);
+		case RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ:
+			return RDD::BARRIER_ACCESS_ACCELERATION_STRUCTURE_READ_BIT;
 		case RESOURCE_USAGE_STORAGE_BUFFER_READ:
 		case RESOURCE_USAGE_STORAGE_IMAGE_READ:
 		case RESOURCE_USAGE_TEXTURE_BUFFER_READ:
@@ -193,12 +202,21 @@ RDD::BarrierAccessBits RenderingDeviceGraph::_usage_to_access_bits(ResourceUsage
 			return RDD::BARRIER_ACCESS_FRAGMENT_DENSITY_MAP_ATTACHMENT_READ_BIT;
 		case RESOURCE_USAGE_GENERAL:
 			return RDD::BarrierAccessBits(RDD::BARRIER_ACCESS_MEMORY_READ_BIT | RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT);
+		case RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE:
+			return RDD::BarrierAccessBits(RDD::BARRIER_ACCESS_ACCELERATION_STRUCTURE_READ_BIT | RDD::BARRIER_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT);
 		default:
 			DEV_ASSERT(false && "Invalid usage.");
 			return RDD::BarrierAccessBits(0);
 	}
 #endif
 }
+
+RenderingDeviceGraph::RaytracingListInstruction *RenderingDeviceGraph::_allocate_raytracing_list_instruction(uint32_t p_instruction_size) {
+	uint32_t raytracing_list_data_offset = raytracing_instruction_list.data.size();
+	raytracing_instruction_list.data.resize(raytracing_list_data_offset + p_instruction_size);
+	return reinterpret_cast<RaytracingListInstruction *>(&raytracing_instruction_list.data[raytracing_list_data_offset]);
+}
+
 
 bool RenderingDeviceGraph::_check_command_intersection(ResourceTracker *p_resource_tracker, int32_t p_previous_command_index, int32_t p_command_index) const {
 	if (p_resource_tracker->usage != RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE && p_resource_tracker->usage != RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE) {
@@ -312,6 +330,10 @@ RenderingDeviceGraph::ComputeListInstruction *RenderingDeviceGraph::_allocate_co
 	compute_list_data_offset = GRAPH_ALIGN(compute_list_data_offset);
 	compute_instruction_list.data.resize(compute_list_data_offset + p_instruction_size);
 	return reinterpret_cast<ComputeListInstruction *>(&compute_instruction_list.data[compute_list_data_offset]);
+}
+
+RenderingDeviceGraph::RaytracingListInstruction *RenderingDeviceGraph::_allocate_raytracing_list_instruction(uint32_t p_instruction_size) {
+	return nullptr;
 }
 
 void RenderingDeviceGraph::_check_discardable_attachment_dependency(ResourceTracker *p_resource_tracker, int32_t p_previous_command_index, int32_t p_command_index) {
@@ -565,6 +587,11 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 				// Memory barriers are pushed regardless of buffer barriers being used or not.
 				r_command->memory_barrier.src_access = r_command->memory_barrier.src_access | resource_tracker->usage_access;
 				r_command->memory_barrier.dst_access = r_command->memory_barrier.dst_access | new_usage_access;
+			} else if (resource_tracker->acceleration_structure_driver_id.id != 0) {
+				// Make sure the acceleration structure has been built before accessing it from raytracing shaders.
+				_add_acceleration_structure_barrier_to_command(resource_tracker->acceleration_structure_driver_id, resource_tracker->usage_access, new_usage_access, command_acceleration_structure_barriers, r_command->acceleration_structure_barrier_index, r_command->acceleration_structure_barrier_count);
+				r_command->memory_barrier.src_access = r_command->memory_barrier.src_access | resource_tracker->usage_access;
+				r_command->memory_barrier.dst_access = r_command->memory_barrier.dst_access | new_usage_access;
 			} else {
 				DEV_ASSERT(false && "Resource tracker does not contain a valid buffer or texture ID.");
 			}
@@ -755,6 +782,25 @@ void RenderingDeviceGraph::_add_buffer_barrier_to_command(RDD::BufferID p_buffer
 }
 #endif
 
+void RenderingDeviceGraph::_add_acceleration_structure_barrier_to_command(RDD::AccelerationStructureID p_acceleration_structure_id, BitField<RDD::BarrierAccessBits> p_src_access, BitField<RDD::BarrierAccessBits> p_dst_access, LocalVector<RDD::AccelerationStructureBarrier> &r_barrier_vector, int32_t &r_barrier_index, int32_t &r_barrier_count) {
+	if (!driver_honors_barriers) {
+		return;
+	}
+
+	if (r_barrier_index < 0) {
+		r_barrier_index = r_barrier_vector.size();
+	}
+
+	RDD::AccelerationStructureBarrier accel_barrier;
+	accel_barrier.acceleration_structure = p_acceleration_structure_id;
+	accel_barrier.src_access = p_src_access;
+	accel_barrier.dst_access = p_dst_access;
+	accel_barrier.offset = 0;
+	accel_barrier.size = RDD::BUFFER_WHOLE_SIZE;
+	r_barrier_vector.push_back(accel_barrier);
+	r_barrier_count++;
+}
+
 void RenderingDeviceGraph::_run_compute_list_command(RDD::CommandBufferID p_command_buffer, const uint8_t *p_instruction_data, uint32_t p_instruction_data_size) {
 	uint32_t instruction_data_cursor = 0;
 	while (instruction_data_cursor < p_instruction_data_size) {
@@ -833,6 +879,47 @@ void RenderingDeviceGraph::_get_draw_list_render_pass_and_framebuffer(const Reco
 
 	r_render_pass = it->value.render_pass;
 	r_framebuffer = it->value.framebuffer;
+}
+
+void RenderingDeviceGraph::_run_raytracing_list_command(RDD::CommandBufferID p_command_buffer, const uint8_t *p_instruction_data, uint32_t p_instruction_data_size) {
+	uint32_t instruction_data_cursor = 0;
+	while (instruction_data_cursor < p_instruction_data_size) {
+		DEV_ASSERT((instruction_data_cursor + sizeof(RaytracingListInstruction)) <= p_instruction_data_size);
+
+		const RaytracingListInstruction *instruction = reinterpret_cast<const RaytracingListInstruction *>(&p_instruction_data[instruction_data_cursor]);
+		switch (instruction->type) {
+			case RaytracingListInstruction::TYPE_BIND_PIPELINE: {
+				const RaytracingListBindPipelineInstruction *bind_pipeline_instruction = reinterpret_cast<const RaytracingListBindPipelineInstruction *>(instruction);
+				driver->command_bind_raytracing_pipeline(p_command_buffer, bind_pipeline_instruction->pipeline);
+				instruction_data_cursor += sizeof(RaytracingListBindPipelineInstruction);
+			} break;
+			case RaytracingListInstruction::TYPE_BIND_UNIFORM_SET: {
+				const RaytracingListBindUniformSetInstruction *bind_uniform_set_instruction = reinterpret_cast<const RaytracingListBindUniformSetInstruction *>(instruction);
+				driver->command_bind_raytracing_uniform_set(p_command_buffer, bind_uniform_set_instruction->uniform_set, bind_uniform_set_instruction->shader, bind_uniform_set_instruction->set_index);
+				instruction_data_cursor += sizeof(RaytracingListBindUniformSetInstruction);
+			} break;
+			case RaytracingListInstruction::TYPE_TRACE_RAYS: {
+				const RaytracingListTraceRaysInstruction *trace_rays_instruction = reinterpret_cast<const RaytracingListTraceRaysInstruction *>(instruction);
+				driver->command_trace_rays(p_command_buffer, trace_rays_instruction->width, trace_rays_instruction->height);
+				instruction_data_cursor += sizeof(RaytracingListTraceRaysInstruction);
+			} break;
+			case RaytracingListInstruction::TYPE_SET_PUSH_CONSTANT: {
+				const RaytracingListSetPushConstantInstruction *set_push_constant_instruction = reinterpret_cast<const RaytracingListSetPushConstantInstruction *>(instruction);
+				const VectorView push_constant_data_view(reinterpret_cast<const uint32_t *>(set_push_constant_instruction->data()), set_push_constant_instruction->size / sizeof(uint32_t));
+				driver->command_bind_push_constants(p_command_buffer, set_push_constant_instruction->shader, 0, push_constant_data_view);
+				instruction_data_cursor += sizeof(RaytracingListSetPushConstantInstruction);
+				instruction_data_cursor += set_push_constant_instruction->size;
+			} break;
+			case RaytracingListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE: {
+				const RaytracingListUniformSetPrepareForUseInstruction *uniform_set_prepare_for_use_instruction = reinterpret_cast<const RaytracingListUniformSetPrepareForUseInstruction *>(instruction);
+				driver->command_uniform_set_prepare_for_use(p_command_buffer, uniform_set_prepare_for_use_instruction->uniform_set, uniform_set_prepare_for_use_instruction->shader, uniform_set_prepare_for_use_instruction->set_index);
+				instruction_data_cursor += sizeof(RaytracingListUniformSetPrepareForUseInstruction);
+			} break;
+			default:
+				DEV_ASSERT(false && "Unknown raytracing list instruction type.");
+				return;
+		}
+	}
 }
 
 void RenderingDeviceGraph::_run_draw_list_command(RDD::CommandBufferID p_command_buffer, const uint8_t *p_instruction_data, uint32_t p_instruction_data_size) {
@@ -993,6 +1080,10 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 		_run_label_command_change(r_command_buffer, command->label_index, p_level, false, true, &p_sorted_commands[i], p_sorted_commands_count - i, r_current_label_index, r_current_label_level);
 
 		switch (command->type) {
+			case RecordedCommand::TYPE_ACCELERATION_STRUCTURE_BUILD: {
+				const RecordedAccelerationStructureBuildCommand *as_build_command = reinterpret_cast<const RecordedAccelerationStructureBuildCommand *>(command);
+				driver->command_build_acceleration_structure(r_command_buffer, as_build_command->acceleration_structure, as_build_command->scratch_buffer);
+			} break;
 			case RecordedCommand::TYPE_BUFFER_CLEAR: {
 				const RecordedBufferClearCommand *buffer_clear_command = reinterpret_cast<const RecordedBufferClearCommand *>(command);
 				driver->command_clear_buffer(r_command_buffer, buffer_clear_command->buffer, buffer_clear_command->offset, buffer_clear_command->size);
@@ -1015,6 +1106,10 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 			case RecordedCommand::TYPE_DRIVER_CALLBACK: {
 				const RecordedDriverCallbackCommand *driver_callback_command = reinterpret_cast<const RecordedDriverCallbackCommand *>(command);
 				driver_callback_command->callback(driver, r_command_buffer, driver_callback_command->userdata);
+			} break;
+			case RecordedCommand::TYPE_RAYTRACING_LIST: {
+				const RecordedRaytracingListCommand *raytracing_list_command = reinterpret_cast<const RecordedRaytracingListCommand *>(command);
+				_run_raytracing_list_command(r_command_buffer, raytracing_list_command->instruction_data(), raytracing_list_command->instruction_data_size);
 			} break;
 			case RecordedCommand::TYPE_COMPUTE_LIST: {
 				if (device.workarounds.avoid_compute_after_draw && workarounds_state.draw_list_found) {
@@ -1297,6 +1392,12 @@ void RenderingDeviceGraph::_group_barriers_for_render_commands(RDD::CommandBuffe
 			barrier_group.buffer_barriers.push_back(recorded_barrier);
 		}
 #endif
+
+		// Gather acceleration structure barriers.
+		for (int32_t j = 0; j < command->acceleration_structure_barrier_count; j++) {
+			const RDD::AccelerationStructureBarrier &recorded_barrier = command_acceleration_structure_barriers[command->acceleration_structure_barrier_index + j];
+			barrier_group.acceleration_structure_barriers.push_back(recorded_barrier);
+		}
 	}
 
 	if (p_full_memory_barrier) {
@@ -1313,7 +1414,8 @@ void RenderingDeviceGraph::_group_barriers_for_render_commands(RDD::CommandBuffe
 #else
 	const bool are_buffer_barriers_empty = true;
 #endif
-	if (is_memory_barrier_empty && are_texture_barriers_empty && are_buffer_barriers_empty) {
+	const bool are_acceleration_structure_barriers_empty = barrier_group.acceleration_structure_barriers.is_empty();
+	if (is_memory_barrier_empty && are_texture_barriers_empty && are_buffer_barriers_empty && are_acceleration_structure_barriers_empty) {
 		// Commands don't require synchronization.
 		return;
 	}
@@ -1325,12 +1427,13 @@ void RenderingDeviceGraph::_group_barriers_for_render_commands(RDD::CommandBuffe
 #else
 	const VectorView<RDD::BufferBarrier> buffer_barriers = VectorView<RDD::BufferBarrier>();
 #endif
+	const VectorView<RDD::AccelerationStructureBarrier> acceleration_structure_barriers = !are_acceleration_structure_barriers_empty ? barrier_group.acceleration_structure_barriers : VectorView<RDD::AccelerationStructureBarrier>();
 
-	driver->command_pipeline_barrier(p_command_buffer, barrier_group.src_stages, barrier_group.dst_stages, memory_barriers, buffer_barriers, texture_barriers);
+	driver->command_pipeline_barrier(p_command_buffer, barrier_group.src_stages, barrier_group.dst_stages, memory_barriers, buffer_barriers, texture_barriers, acceleration_structure_barriers);
 
 	bool separate_texture_barriers = !barrier_group.normalization_barriers.is_empty() && !barrier_group.transition_barriers.is_empty();
 	if (separate_texture_barriers) {
-		driver->command_pipeline_barrier(p_command_buffer, barrier_group.src_stages, barrier_group.dst_stages, VectorView<RDD::MemoryBarrier>(), VectorView<RDD::BufferBarrier>(), barrier_group.transition_barriers);
+		driver->command_pipeline_barrier(p_command_buffer, barrier_group.src_stages, barrier_group.dst_stages, VectorView<RDD::MemoryBarrier>(), VectorView<RDD::BufferBarrier>(), barrier_group.transition_barriers, VectorView<RDD::AccelerationStructureBarrier>());
 	}
 }
 
@@ -1555,6 +1658,46 @@ void RenderingDeviceGraph::_print_compute_list(const uint8_t *p_instruction_data
 	}
 }
 
+void RenderingDeviceGraph::_print_raytracing_list(const uint8_t *p_instruction_data, uint32_t p_instruction_data_size) {
+	uint32_t instruction_data_cursor = 0;
+	while (instruction_data_cursor < p_instruction_data_size) {
+		DEV_ASSERT((instruction_data_cursor + sizeof(RaytracingListInstruction)) <= p_instruction_data_size);
+
+		const RaytracingListInstruction *instruction = reinterpret_cast<const RaytracingListInstruction *>(&p_instruction_data[instruction_data_cursor]);
+		switch (instruction->type) {
+			case RaytracingListInstruction::TYPE_BIND_PIPELINE: {
+				const RaytracingListBindPipelineInstruction *bind_pipeline_instruction = reinterpret_cast<const RaytracingListBindPipelineInstruction *>(instruction);
+				print_line("\tBIND PIPELINE ID", itos(bind_pipeline_instruction->pipeline.id));
+				instruction_data_cursor += sizeof(RaytracingListBindPipelineInstruction);
+			} break;
+			case RaytracingListInstruction::TYPE_BIND_UNIFORM_SET: {
+				const RaytracingListBindUniformSetInstruction *bind_uniform_set_instruction = reinterpret_cast<const RaytracingListBindUniformSetInstruction *>(instruction);
+				print_line("\tBIND UNIFORM SET ID", itos(bind_uniform_set_instruction->uniform_set.id), "SHADER ID", itos(bind_uniform_set_instruction->shader.id));
+				instruction_data_cursor += sizeof(RaytracingListBindUniformSetInstruction);
+			} break;
+			case RaytracingListInstruction::TYPE_SET_PUSH_CONSTANT: {
+				const RaytracingListSetPushConstantInstruction *set_push_constant_instruction = reinterpret_cast<const RaytracingListSetPushConstantInstruction *>(instruction);
+				print_line("\tSET PUSH CONSTANT SIZE", set_push_constant_instruction->size);
+				instruction_data_cursor += sizeof(RaytracingListSetPushConstantInstruction);
+				instruction_data_cursor += set_push_constant_instruction->size;
+			} break;
+			case RaytracingListInstruction::TYPE_TRACE_RAYS: {
+				const RaytracingListTraceRaysInstruction *trace_rays_instruction = reinterpret_cast<const RaytracingListTraceRaysInstruction *>(instruction);
+				print_line("\tTRACE RAYS WIDTH", itos(trace_rays_instruction->width), "HEIGHT", itos(trace_rays_instruction->height));
+				instruction_data_cursor += sizeof(RaytracingListTraceRaysInstruction);
+			} break;
+			case RaytracingListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE: {
+				const RaytracingListUniformSetPrepareForUseInstruction *uniform_set_prepare_for_use_instruction = reinterpret_cast<const RaytracingListUniformSetPrepareForUseInstruction *>(instruction);
+				print_line("\tUNIFORM SET PREPARE FOR USE ID", itos(uniform_set_prepare_for_use_instruction->uniform_set.id), "SHADER ID", itos(uniform_set_prepare_for_use_instruction->shader.id), "INDEX", itos(uniform_set_prepare_for_use_instruction->set_index));
+				instruction_data_cursor += sizeof(RaytracingListUniformSetPrepareForUseInstruction);
+			} break;
+			default:
+				DEV_ASSERT(false && "Unknown raytracing list instruction type.");
+				return;
+		}
+	}
+}
+
 void RenderingDeviceGraph::initialize(RDD *p_driver, RenderingContextDriver::Device p_device, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame) {
 	DEV_ASSERT(p_driver != nullptr);
 	DEV_ASSERT(p_render_pass_creation_function != nullptr);
@@ -1603,6 +1746,7 @@ void RenderingDeviceGraph::begin() {
 	command_normalization_barriers.clear();
 	command_transition_barriers.clear();
 	command_buffer_barriers.clear();
+	command_acceleration_structure_barriers.clear();
 	command_label_chars.clear();
 	command_label_colors.clear();
 	command_label_offsets.clear();
@@ -1838,6 +1982,88 @@ void RenderingDeviceGraph::add_compute_list_end() {
 	command->instruction_data_size = instruction_data_size;
 	memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
 	_add_command_to_graph(compute_instruction_list.command_trackers.ptr(), compute_instruction_list.command_tracker_usages.ptr(), compute_instruction_list.command_trackers.size(), command_index, command);
+}
+
+void RenderingDeviceGraph::add_raytracing_list_begin() {
+	raytracing_instruction_list.clear();
+	raytracing_instruction_list.index++;
+}
+
+void RenderingDeviceGraph::add_raytracing_list_bind_pipeline(RDD::RayTracingPipelineID p_pipeline) {
+	RaytracingListBindPipelineInstruction *instruction = reinterpret_cast<RaytracingListBindPipelineInstruction *>(_allocate_raytracing_list_instruction(sizeof(RaytracingListBindPipelineInstruction)));
+	instruction->type = RaytracingListInstruction::TYPE_BIND_PIPELINE;
+	instruction->pipeline = p_pipeline;
+	raytracing_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+}
+
+void RenderingDeviceGraph::add_raytracing_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index) {
+	RaytracingListBindUniformSetInstruction *instruction = reinterpret_cast<RaytracingListBindUniformSetInstruction *>(_allocate_raytracing_list_instruction(sizeof(RaytracingListBindUniformSetInstruction)));
+	instruction->type = RaytracingListInstruction::TYPE_BIND_UNIFORM_SET;
+	instruction->shader = p_shader;
+	instruction->uniform_set = p_uniform_set;
+	instruction->set_index = set_index;
+}
+
+void RenderingDeviceGraph::add_raytracing_list_set_push_constant(RDD::ShaderID p_shader, const void *p_data, uint32_t p_data_size) {
+	uint32_t instruction_size = sizeof(RaytracingListSetPushConstantInstruction) + p_data_size;
+	RaytracingListSetPushConstantInstruction *instruction = reinterpret_cast<RaytracingListSetPushConstantInstruction *>(_allocate_raytracing_list_instruction(instruction_size));
+	instruction->type = RaytracingListInstruction::TYPE_SET_PUSH_CONSTANT;
+	instruction->size = p_data_size;
+	instruction->shader = p_shader;
+	memcpy(instruction->data(), p_data, p_data_size);
+}
+
+void RenderingDeviceGraph::add_raytracing_list_trace_rays(uint32_t p_width, uint32_t p_height) {
+	RaytracingListTraceRaysInstruction *instruction = reinterpret_cast<RaytracingListTraceRaysInstruction *>(_allocate_raytracing_list_instruction(sizeof(RaytracingListTraceRaysInstruction)));
+	instruction->type = RaytracingListInstruction::TYPE_TRACE_RAYS;
+	instruction->width = p_width;
+	instruction->height = p_height;
+}
+
+void RenderingDeviceGraph::add_raytracing_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index) {
+	RaytracingListUniformSetPrepareForUseInstruction *instruction = reinterpret_cast<RaytracingListUniformSetPrepareForUseInstruction *>(_allocate_raytracing_list_instruction(sizeof(RaytracingListUniformSetPrepareForUseInstruction)));
+	instruction->type = RaytracingListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE;
+	instruction->shader = p_shader;
+	instruction->uniform_set = p_uniform_set;
+	instruction->set_index = set_index;
+}
+
+void RenderingDeviceGraph::add_raytracing_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage) {
+	DEV_ASSERT(p_tracker != nullptr);
+
+	p_tracker->reset_if_outdated(tracking_frame);
+
+	if (p_tracker->raytracing_list_index != raytracing_instruction_list.index) {
+		raytracing_instruction_list.command_trackers.push_back(p_tracker);
+		raytracing_instruction_list.command_tracker_usages.push_back(p_usage);
+		p_tracker->raytracing_list_index = raytracing_instruction_list.index;
+		p_tracker->raytracing_list_usage = p_usage;
+	}
+#ifdef DEV_ENABLED
+	else if (p_tracker->raytracing_list_usage != p_usage) {
+		ERR_FAIL_MSG(vformat("Tracker can't have more than one type of usage in the same raytracing list. Raytracing list usage is %d and the requested usage is %d.", p_tracker->raytracing_list_usage, p_usage));
+	}
+#endif
+}
+
+void RenderingDeviceGraph::add_raytracing_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages) {
+	DEV_ASSERT(p_trackers.size() == p_usages.size());
+
+	for (uint32_t i = 0; i < p_trackers.size(); i++) {
+		add_raytracing_list_usage(p_trackers[i], p_usages[i]);
+	}
+}
+
+void RenderingDeviceGraph::add_raytracing_list_end() {
+	int32_t command_index;
+	uint32_t instruction_data_size = raytracing_instruction_list.data.size();
+	uint32_t command_size = sizeof(RecordedRaytracingListCommand) + instruction_data_size;
+	RecordedRaytracingListCommand *command = static_cast<RecordedRaytracingListCommand *>(_allocate_command(command_size, command_index));
+	command->type = RecordedCommand::TYPE_RAYTRACING_LIST;
+	command->self_stages = raytracing_instruction_list.stages;
+	command->instruction_data_size = instruction_data_size;
+	memcpy(command->instruction_data(), raytracing_instruction_list.data.ptr(), instruction_data_size);
+	_add_command_to_graph(raytracing_instruction_list.command_trackers.ptr(), raytracing_instruction_list.command_tracker_usages.ptr(), raytracing_instruction_list.command_trackers.size(), command_index, command);
 }
 
 void RenderingDeviceGraph::add_draw_list_begin(FramebufferCache *p_framebuffer_cache, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb, bool p_split_cmd_buffer) {

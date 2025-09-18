@@ -93,12 +93,12 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	};
 
 	struct AccelerationStructureCapabilities {
-		bool acceleration_structure_supported = false;
+		bool acceleration_structure_support = false;
 		uint32_t min_scratch_offset_allignment = 0;
 	};
 
 	struct RayTracingCapabilities {
-		bool raytracing_supported = false;
+		bool raytracing_support = false;
 		uint32_t shader_group_handle_size = 0;
 		uint32_t shader_group_handle_alignment = 0;
 		uint32_t shader_group_handle_size_aligned = 0;
@@ -439,6 +439,7 @@ private:
 		VkShaderStageFlags vk_push_constant_stages = 0;
 		TightLocalVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
 		TightLocalVector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
+		TightLocalVector<VkRayTracingShaderGroupCreateInfoKHR> vk_groups_create_info;
 		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
 
 		// Used to update the shader binding table buffer.
@@ -650,7 +651,7 @@ public:
 	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_acceleration_info, VkAccelerationStructureTypeKHR p_type);
 	virtual void build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer);
 	virtual RDD::AccelerationStructureID create_tlas(BufferID p_instance_buffer) override final;
-	virtual void fill_tlas_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) override final;
+	virtual void fill_tlas_buffer_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) override final;
 	// To implement:
 	// Free acceleration struct
 	// get acceleration scratch size in byes
@@ -693,7 +694,10 @@ private:
 public:
 	virtual PipelineID compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
 
+	virtual RayTracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
 	VkResult _raytracing_pipeline_stb_create(RayTracingPipelineID p_pipeline, ShaderID p_shader);
+	virtual void raytracing_pipeline_free(RayTracingPipelineID p_pipeline) override final;
+
 
 	/*****************/
 	/**** QUERIES ****/

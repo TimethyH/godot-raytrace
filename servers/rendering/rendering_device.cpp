@@ -5794,6 +5794,232 @@ static uint32_t _get_alignment_offset(uint32_t p_offset, uint32_t p_required_ali
 	return alignment_offset;
 }
 
+RD::RaytracingListID RenderingDevice::raytracing_list_begin() {
+	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+
+	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), INVALID_ID, "The current rendering device has no raytracing support.");
+
+	ERR_FAIL_COND_V_MSG(draw_list.active, INVALID_ID, "Only one draw/raytracing list can be active at the same time.");
+	ERR_FAIL_COND_V_MSG(compute_list.active, INVALID_ID, "Only one compute/raytracing list can be active at the same time.");
+	ERR_FAIL_COND_V_MSG(raytracing_list.active, INVALID_ID, "Only one raytracing list can be active at the same time.");
+
+	raytracing_list.active = true;
+
+	draw_graph.add_raytracing_list_begin();
+
+	return ID_TYPE_RAYTRACING_LIST;
+}
+
+void RenderingDevice::raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline) {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
+	ERR_FAIL_COND(!raytracing_list.active);
+
+	const RayracingPipeline *pipeline = raytracing_pipeline_owner.get_or_null(p_raytracing_pipeline);
+	ERR_FAIL_NULL(pipeline);
+
+	if (p_raytracing_pipeline == raytracing_list.state.pipeline) {
+		return; // Redundant state, return.
+	}
+
+	raytracing_list.state.pipeline = p_raytracing_pipeline;
+	raytracing_list.state.pipeline_driver_id = pipeline->driver_id;
+
+	draw_graph.add_raytracing_list_bind_pipeline(pipeline->driver_id);
+
+	if (raytracing_list.state.pipeline_shader != pipeline->shader) {
+		// Shader changed, so descriptor sets may become incompatible.
+
+		uint32_t pcount = pipeline->set_formats.size(); // Formats count in this pipeline.
+		raytracing_list.state.set_count = MAX(raytracing_list.state.set_count, pcount);
+		const uint32_t *pformats = pipeline->set_formats.ptr(); // Pipeline set formats.
+
+		uint32_t first_invalid_set = UINT32_MAX; // All valid by default.
+		switch (driver->api_trait_get(RDD::API_TRAIT_SHADER_CHANGE_INVALIDATION)) {
+			case RDD::SHADER_CHANGE_INVALIDATION_ALL_BOUND_UNIFORM_SETS: {
+				first_invalid_set = 0;
+			} break;
+			case RDD::SHADER_CHANGE_INVALIDATION_INCOMPATIBLE_SETS_PLUS_CASCADE: {
+				for (uint32_t i = 0; i < pcount; i++) {
+					if (raytracing_list.state.sets[i].pipeline_expected_format != pformats[i]) {
+						first_invalid_set = i;
+						break;
+					}
+				}
+			} break;
+			case RDD::SHADER_CHANGE_INVALIDATION_ALL_OR_NONE_ACCORDING_TO_LAYOUT_HASH: {
+				if (raytracing_list.state.pipeline_shader_layout_hash != pipeline->shader_layout_hash) {
+					first_invalid_set = 0;
+				}
+			} break;
+		}
+
+		for (uint32_t i = 0; i < pcount; i++) {
+			raytracing_list.state.sets[i].bound = raytracing_list.state.sets[i].bound && i < first_invalid_set;
+			raytracing_list.state.sets[i].pipeline_expected_format = pformats[i];
+		}
+
+		for (uint32_t i = pcount; i < raytracing_list.state.set_count; i++) {
+			// Unbind the ones above (not used) if exist.
+			raytracing_list.state.sets[i].bound = false;
+		}
+
+		raytracing_list.state.set_count = pcount; // Update set count.
+
+		if (pipeline->push_constant_size) {
+#ifdef DEBUG_ENABLED
+			raytracing_list.validation.pipeline_push_constant_supplied = false;
+#endif
+		}
+
+		raytracing_list.state.pipeline_shader = pipeline->shader;
+		raytracing_list.state.pipeline_shader_driver_id = pipeline->shader_driver_id;
+		raytracing_list.state.pipeline_shader_layout_hash = pipeline->shader_layout_hash;
+	}
+
+#ifdef DEBUG_ENABLED
+	// Update raytracing pass pipeline info.
+	raytracing_list.validation.pipeline_active = true;
+	raytracing_list.validation.pipeline_push_constant_size = pipeline->push_constant_size;
+#endif
+}
+
+void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index) {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
+	ERR_FAIL_COND(!raytracing_list.active);
+
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_COND_MSG(p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS) || p_index >= MAX_UNIFORM_SETS,
+			"Attempting to bind a descriptor set (" + itos(p_index) + ") greater than what the hardware supports (" + itos(driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS)) + ").");
+#endif
+
+	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
+	ERR_FAIL_NULL(uniform_set);
+
+	if (p_index > raytracing_list.state.set_count) {
+		raytracing_list.state.set_count = p_index;
+	}
+
+	raytracing_list.state.sets[p_index].uniform_set_driver_id = uniform_set->driver_id; // Update set pointer.
+	raytracing_list.state.sets[p_index].bound = false; // Needs rebind.
+	raytracing_list.state.sets[p_index].uniform_set_format = uniform_set->format;
+	raytracing_list.state.sets[p_index].uniform_set = p_uniform_set;
+}
+
+void RenderingDevice::raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size) {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
+	ERR_FAIL_COND(!raytracing_list.active);
+
+	ERR_FAIL_COND_MSG(p_data_size > MAX_PUSH_CONSTANT_SIZE, "Push constants can't be bigger than 128 bytes to maintain compatibility.");
+
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_COND_MSG(p_data_size != raytracing_list.validation.pipeline_push_constant_size,
+			"This raytracing pipeline requires (" + itos(raytracing_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
+#endif
+
+	draw_graph.add_raytracing_list_set_push_constant(raytracing_list.state.pipeline_shader_driver_id, p_data, p_data_size);
+
+	// Store it in the state in case we need to restart the raytracing list.
+	memcpy(raytracing_list.state.push_constant_data, p_data, p_data_size);
+	raytracing_list.state.push_constant_size = p_data_size;
+
+#ifdef DEBUG_ENABLED
+	raytracing_list.validation.pipeline_push_constant_supplied = true;
+#endif
+}
+
+void RenderingDevice::raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_width, uint32_t p_height) {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND(p_list != ID_TYPE_RAYTRACING_LIST);
+	ERR_FAIL_COND(!raytracing_list.active);
+
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_NULL_MSG(shader_owner.get_or_null(raytracing_list.state.pipeline_shader), "No shader was set before attempting to trace rays.");
+	ERR_FAIL_NULL_MSG(raytracing_pipeline_owner.get_or_null(raytracing_list.state.pipeline), "No raytracing pipeline was set before attempting to trace rays.");
+#endif
+
+#ifdef DEBUG_ENABLED
+
+	ERR_FAIL_COND_MSG(!raytracing_list.validation.pipeline_active, "No raytracing pipeline was set before attempting to draw.");
+
+	if (raytracing_list.validation.pipeline_push_constant_size > 0) {
+		// Using push constants, check that they were supplied.
+		ERR_FAIL_COND_MSG(!raytracing_list.validation.pipeline_push_constant_supplied,
+				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
+	}
+
+#endif
+
+#ifdef DEBUG_ENABLED
+	for (uint32_t i = 0; i < raytracing_list.state.set_count; i++) {
+		if (raytracing_list.state.sets[i].pipeline_expected_format == 0) {
+			// Nothing expected by this pipeline.
+			continue;
+		}
+
+		if (raytracing_list.state.sets[i].pipeline_expected_format != raytracing_list.state.sets[i].uniform_set_format) {
+			if (raytracing_list.state.sets[i].uniform_set_format == 0) {
+				ERR_FAIL_MSG("Uniforms were never supplied for set (" + itos(i) + ") at the time of drawing, which are required by the pipeline.");
+			} else if (uniform_set_owner.owns(raytracing_list.state.sets[i].uniform_set)) {
+				UniformSet *us = uniform_set_owner.get_or_null(raytracing_list.state.sets[i].uniform_set);
+				ERR_FAIL_MSG("Uniforms supplied for set (" + itos(i) + "):\n" + _shader_uniform_debug(us->shader_id, us->shader_set) + "\nare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(raytracing_list.state.pipeline_shader));
+			} else {
+				ERR_FAIL_MSG("Uniforms supplied for set (" + itos(i) + ", which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(raytracing_list.state.pipeline_shader));
+			}
+		}
+	}
+#endif
+
+	// Prepare descriptor sets if the API doesn't use pipeline barriers.
+	if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+		for (uint32_t i = 0; i < raytracing_list.state.set_count; i++) {
+			if (raytracing_list.state.sets[i].pipeline_expected_format == 0) {
+				// Nothing expected by this pipeline.
+				continue;
+			}
+
+			draw_graph.add_raytracing_list_uniform_set_prepare_for_use(raytracing_list.state.pipeline_shader_driver_id, raytracing_list.state.sets[i].uniform_set_driver_id, i);
+		}
+	}
+
+	// Bind descriptor sets.
+	for (uint32_t i = 0; i < raytracing_list.state.set_count; i++) {
+		if (raytracing_list.state.sets[i].pipeline_expected_format == 0) {
+			continue; // Nothing expected by this pipeline.
+		}
+		if (!raytracing_list.state.sets[i].bound) {
+			// All good, see if this requires re-binding.
+			draw_graph.add_raytracing_list_bind_uniform_set(raytracing_list.state.pipeline_shader_driver_id, raytracing_list.state.sets[i].uniform_set_driver_id, i);
+
+			UniformSet *uniform_set = uniform_set_owner.get_or_null(raytracing_list.state.sets[i].uniform_set);
+			_uniform_set_update_shared(uniform_set);
+
+			draw_graph.add_raytracing_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
+
+			raytracing_list.state.sets[i].bound = true;
+		}
+	}
+
+	draw_graph.add_raytracing_list_trace_rays(p_width, p_height);
+	raytracing_list.state.trace_count++;
+}
+
+void RenderingDevice::raytracing_list_end() {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND(!raytracing_list.active);
+
+	draw_graph.add_raytracing_list_end();
+
+	raytracing_list = RaytracingList();
+}
+
 RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset) {
 	// Find the first worker that is not currently executing anything and has enough size for the transfer.
 	// If no workers are available, we make a new one. If we're not allowed to make new ones, we wait until one of them is available.
@@ -7662,6 +7888,13 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("compute_list_dispatch_indirect", "compute_list", "buffer", "offset"), &RenderingDevice::compute_list_dispatch_indirect);
 	ClassDB::bind_method(D_METHOD("compute_list_add_barrier", "compute_list"), &RenderingDevice::compute_list_add_barrier);
 	ClassDB::bind_method(D_METHOD("compute_list_end"), &RenderingDevice::compute_list_end);
+
+	ClassDB::bind_method(D_METHOD("raytracing_list_begin"), &RenderingDevice::raytracing_list_begin);
+	ClassDB::bind_method(D_METHOD("raytracing_list_bind_raytracing_pipeline", "raytracing_list", "raytracing_pipeline"), &RenderingDevice::raytracing_list_bind_raytracing_pipeline);
+	ClassDB::bind_method(D_METHOD("raytracing_list_set_push_constant", "raytracing_list", "buffer", "size_bytes"), &RenderingDevice::raytracing_list_set_push_constant);
+	ClassDB::bind_method(D_METHOD("raytracing_list_bind_uniform_set", "raytracing_list", "uniform_set", "set_index"), &RenderingDevice::raytracing_list_bind_uniform_set);
+	ClassDB::bind_method(D_METHOD("raytracing_list_trace_rays", "raytracing_list", "width", "height"), &RenderingDevice::raytracing_list_trace_rays);
+	ClassDB::bind_method(D_METHOD("raytracing_list_end"), &RenderingDevice::raytracing_list_end);
 
 	ClassDB::bind_method(D_METHOD("free_rid", "rid"), &RenderingDevice::free);
 
