@@ -1264,11 +1264,11 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	RID create_blas(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
-	RID create_tlas(RID p_instances_buffer);
-	RID create_tlas_instances_buffer(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
-	void fill_tlas_instances(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
-	Error build_acceleration_structure(RID p_acceleration_structure);
+	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
+	RID tlas_create(RID p_instances_buffer);
+	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
+	void tlas_instances_buffer_fill(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
+	Error acceleration_structure_build(RID p_acceleration_structure);
 
 	/*************************/
 	/**** DRAW LISTS (II) ****/
@@ -1511,11 +1511,11 @@ private:
 	RayTracingList::State raytracing_list_barrier_state;
 
 public:
-	RaytracingListID raytracing_list_begin();
-	void raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline);
-	void raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index);
-	void raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size);
-	void raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_width, uint32_t p_height);
+	RayTracingListID raytracing_list_begin();
+	void raytracing_list_bind_raytracing_pipeline(RayTracingListID p_list, RID p_raytracing_pipeline);
+	void raytracing_list_bind_uniform_set(RayTracingListID p_list, RID p_uniform_set, uint32_t p_index);
+	void raytracing_list_set_push_constant(RayTracingListID p_list, const void* p_data, uint32_t p_data_size);
+	void raytracing_list_trace_rays(RayTracingListID p_list, uint32_t p_width, uint32_t p_height);
 	void raytracing_list_end();
 
 private:
@@ -1833,6 +1833,8 @@ private:
 
 	RID _render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const Ref<RDPipelineRasterizationState> &p_rasterization_state, const Ref<RDPipelineMultisampleState> &p_multisample_state, const Ref<RDPipelineDepthStencilState> &p_depth_stencil_state, const Ref<RDPipelineColorBlendState> &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);
 	RID _compute_pipeline_create(RID p_shader, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);
+	RID _raytracing_pipeline_create(RID p_shader,
+			const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);
 
 	void _draw_list_set_push_constant(DrawListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
 	void _compute_list_set_push_constant(ComputeListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);

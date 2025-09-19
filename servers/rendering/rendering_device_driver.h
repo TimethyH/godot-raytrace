@@ -577,9 +577,9 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) = 0;
-	virtual AccelerationStructureID create_tlas(BufferID p_instance_buffer) = 0;
-	virtual void fill_tlas_buffer_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) = 0;
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) = 0;
+	virtual AccelerationStructureID tlas_create(BufferID p_instance_buffer) = 0;
+	virtual void tlas_instances_buffer_fill(const LocalVector<AccelerationStructureID> &p_blasses, const Vector<Transform3D> &p_transforms, BufferID p_instance_buffer) = 0;
 	virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
 	virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
 	virtual void free_acceleration_structure(AccelerationStructureID p_acceleration_structure) = 0;

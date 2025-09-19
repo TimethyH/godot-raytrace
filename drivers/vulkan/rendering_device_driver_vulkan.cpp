@@ -5313,7 +5313,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_OPAQUE, VK_GEOMETRY_OPAQUE_BIT_KHR));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
 
-RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer,
+RenderingDeviceDriver::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p_vertex_buffer, BufferID p_index_buffer,
 		VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset,
 		uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) {
 	const VertexFormatInfo *vertex_format_info = (const VertexFormatInfo *)p_vertex_format.id;
@@ -5429,7 +5429,7 @@ static _FORCE_INLINE_ void _store_transform_in_3x4(const Transform3D &p_mtx, VkT
 	r_mtx.matrix[2][3] = p_mtx.origin.z;
 }
 
-RDD::AccelerationStructureID RenderingDeviceDriverVulkan::create_tlas(BufferID p_instance_buffer) {
+RDD::AccelerationStructureID RenderingDeviceDriverVulkan::tlas_create(BufferID p_instance_buffer) {
 	AccelerationStructureInfo *acceleration_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
 
 	acceleration_info->geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -5460,7 +5460,7 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::create_tlas(BufferID p
 	return AccelerationStructureID(acceleration_info);
 }
 
-void RenderingDeviceDriverVulkan::fill_tlas_buffer_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) {
+void RenderingDeviceDriverVulkan::tlas_buffer_instances_fill(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) {
 	uint32_t blas_count = p_blasses.size();
 	ERR_FAIL_COND(blas_count == 0);
 

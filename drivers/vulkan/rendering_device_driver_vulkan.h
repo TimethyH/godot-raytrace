@@ -647,11 +647,11 @@ public:
 		LocalVector<VkAccelerationStructureInstanceKHR> instances;
 	};
 
-	virtual AccelerationStructureID create_blas(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) override final;
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) override final;
 	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_acceleration_info, VkAccelerationStructureTypeKHR p_type);
 	virtual void build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer);
-	virtual RDD::AccelerationStructureID create_tlas(BufferID p_instance_buffer) override final;
-	virtual void fill_tlas_buffer_instances(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) override final;
+	virtual RDD::AccelerationStructureID tlas_create(BufferID p_instance_buffer) override final;
+	virtual void tlas_buffer_instances_fill(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) override final;
 	// To implement:
 	// Free acceleration struct
 	// get acceleration scratch size in byes
