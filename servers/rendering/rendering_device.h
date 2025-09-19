@@ -1247,7 +1247,7 @@ private:
 		RDD::AccelerationStructureID driver_id;
 		RDD::AccelerationStructureType type = RDD::ACCELERATION_STRUCTURE_TYPE_BLAS;
 		RDD::BufferID scratch_buffer;
-		RDG::ResourceTracker* draw_tracker = nullptr;
+		RDG::ResourceTracker *draw_tracker = nullptr;
 
 		RID vertex_array;
 		RID index_array;
@@ -1267,7 +1267,7 @@ public:
 	RID create_blas(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
 	RID create_tlas(RID p_instances_buffer);
 	RID create_tlas_instances_buffer(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
-	void fill_tlas_instances(RID p_instances_buffer, const Vector<RID>& p_blasses, const Vector<Transform3D>& p_transforms);
+	void fill_tlas_instances(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
 	Error build_acceleration_structure(RID p_acceleration_structure);
 
 	/*************************/
@@ -1463,8 +1463,10 @@ public:
 
 	void compute_list_end();
 
-
-	// ----------- RAY TRACING LIST -----------
+private:
+	/***************************/
+	/**** RAY TRACING LISTS ****/
+	/***************************/
 
 	struct RayTracingList {
 		bool active = false;
@@ -1490,30 +1492,31 @@ public:
 		} state;
 
 #ifdef DEBUG_ENABLED
-	struct Validation {
-		bool active = true; // Means command buffer was not closed, so you can keep adding things.
-		Vector<uint32_t> set_formats;
-		Vector<bool> set_bound;
-		Vector<RID> set_rids;
-		// Last pipeline set values.
-		bool pipeline_active = false;
-		RID pipeline_shader;
-		uint32_t invalid_set_from = 0;
-		uint32_t pipeline_push_constant_size = 0;
-		bool pipeline_push_constant_supplied = false;
-	} validation;
+		struct Validation {
+			bool active = true; // Means command buffer was not closed, so you can keep adding things.
+			Vector<uint32_t> set_formats;
+			Vector<bool> set_bound;
+			Vector<RID> set_rids;
+			// Last pipeline set values.
+			bool pipeline_active = false;
+			RID pipeline_shader;
+			uint32_t invalid_set_from = 0;
+			uint32_t pipeline_push_constant_size = 0;
+			bool pipeline_push_constant_supplied = false;
+		} validation;
 #endif
 	};
 
 	RayTracingList raytracing_list;
 	RayTracingList::State raytracing_list_barrier_state;
 
-	RayTracingListID begin_raytracing_list();
-	void bind_raytracing_pipeline_raytracing_list(RayTracingListID p_list, RID p_raytracing_pipeline);
-	void bind_uniform_set_raytracing_list(RayTracingListID p_list, RID p_uniform_set, uint32_t p_index);
-	void set_push_constant_raytracing_list(RayTracingListID p_list, const void *p_data, uint32_t p_data_size);
-	void trace_rays_raytracing_list(RayTracingListID p_list, uint32_t p_width, uint32_t p_height);
-	void end_raytracing_list();
+public:
+	RaytracingListID raytracing_list_begin();
+	void raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline);
+	void raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index);
+	void raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size);
+	void raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_width, uint32_t p_height);
+	void raytracing_list_end();
 
 private:
 	/*************************/

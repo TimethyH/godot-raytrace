@@ -35,6 +35,8 @@
 #include "rendering_light_culler.h"
 #include "rendering_server_default.h"
 
+#include "raytracing/renderer_ray_trace_settings.h"
+
 #if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
 // This is used only to obtain node paths for user-friendly physics interpolation warnings.
 #include "scene/main/node.h"
@@ -2704,7 +2706,8 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	bool using_shadows = !RendererRayTraceSettings::get_singleton()->get_shadows();
+	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, using_shadows, r_render_info);
 #endif
 }
 
@@ -3489,10 +3492,12 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
 	}
 
-	for (uint32_t i = 0; i < max_shadows_used; i++) {
-		render_shadow_data[i].instances.clear();
+	if (p_using_shadows) {
+		for (uint32_t i = 0; i < max_shadows_used; i++) {
+			render_shadow_data[i].instances.clear();
+		}
+		max_shadows_used = 0;
 	}
-	max_shadows_used = 0;
 
 	for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 		render_sdfgi_data[i].instances.clear();
