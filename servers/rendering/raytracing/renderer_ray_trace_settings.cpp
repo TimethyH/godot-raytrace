@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_server_globals.cpp                                          */
+/*  renderer_ray_trace_settings.cpp                                       */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,24 +28,27 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "rendering_server_globals.h"
+#include "renderer_ray_trace_settings.h"
+#include "core/config/project_settings.h"
 
-bool RenderingServerGlobals::threaded = false;
+RendererRayTraceSettings *RendererRayTraceSettings::singleton = nullptr;
 
-RendererUtilities *RenderingServerGlobals::utilities = nullptr;
-RendererLightStorage *RenderingServerGlobals::light_storage = nullptr;
-RendererMaterialStorage *RenderingServerGlobals::material_storage = nullptr;
-RendererMeshStorage *RenderingServerGlobals::mesh_storage = nullptr;
-RendererParticlesStorage *RenderingServerGlobals::particles_storage = nullptr;
-RendererTextureStorage *RenderingServerGlobals::texture_storage = nullptr;
-RendererGI *RenderingServerGlobals::gi = nullptr;
-RendererFog *RenderingServerGlobals::fog = nullptr;
-RendererCameraAttributes *RenderingServerGlobals::camera_attributes = nullptr;
-RendererCanvasRender *RenderingServerGlobals::canvas_render = nullptr;
-RendererCompositor *RenderingServerGlobals::rasterizer = nullptr;
+RendererRayTraceSettings::RendererRayTraceSettings() {
+	if (singleton == nullptr) {
+		singleton = this;
 
-RendererCanvasCull *RenderingServerGlobals::canvas = nullptr;
-RendererViewport *RenderingServerGlobals::viewport = nullptr;
-RenderingMethod *RenderingServerGlobals::scene = nullptr;
+		enable_shadows = GLOBAL_GET("rendering/ray_tracing/ray_traced_shadows");
+	}
+}
 
-RendererRayTraceSettings *RenderingServerGlobals::ray_trace_settings = nullptr;
+bool RendererRayTraceSettings::get_shadows() const {
+	return enable_shadows;
+}
+
+void RendererRayTraceSettings::set_shadows(bool p_enable) {
+	enable_shadows = p_enable;
+}
+
+RendererRayTraceSettings *RendererRayTraceSettings::get_singleton() {
+	return singleton;
+}

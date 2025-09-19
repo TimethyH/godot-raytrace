@@ -136,6 +136,8 @@ public:
 	DEFINE_ID(QueryPool);
 	DEFINE_ID(Fence);
 	DEFINE_ID(Semaphore);
+	DEFINE_ID(AccelerationStructure);
+	DEFINE_ID(RayTracingPipeline);
 
 public:
 	/*****************/
@@ -166,7 +168,10 @@ public:
 		BUFFER_USAGE_INDEX_BIT = (1 << 6),
 		BUFFER_USAGE_VERTEX_BIT = (1 << 7),
 		BUFFER_USAGE_INDIRECT_BIT = (1 << 8),
+		BUFFER_USAGE_SHADER_BINDING_TABLE_BIT = (1 << 10),
 		BUFFER_USAGE_DEVICE_ADDRESS_BIT = (1 << 17),
+		BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 19),
+		BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT = (1 << 20)
 	};
 
 	enum {
@@ -310,8 +315,10 @@ public:
 		PIPELINE_STAGE_ALL_GRAPHICS_BIT = (1 << 15),
 		PIPELINE_STAGE_ALL_COMMANDS_BIT = (1 << 16),
 		PIPELINE_STAGE_CLEAR_STORAGE_BIT = (1 << 17),
+		PIPELINE_STAGE_RAY_TRACING_SHADER_BIT = (2 << 20),
 		PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT = (1 << 22),
 		PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT = (1 << 23),
+		PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (1 << 24), // original code has 2 << 24, but i dont see the reason for this?..
 	};
 
 	enum BarrierAccessBits {
@@ -337,6 +344,8 @@ public:
 		BARRIER_ACCESS_RESOLVE_READ_BIT = (1 << 25),
 		BARRIER_ACCESS_RESOLVE_WRITE_BIT = (1 << 26),
 		BARRIER_ACCESS_STORAGE_CLEAR_BIT = (1 << 27),
+		BARRIER_ACCESS_ACCELERATION_STRUCTURE_READ_BIT = (2 << 20),
+		BARRIER_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT = (4 << 20),
 	};
 
 	struct MemoryBarrier {
@@ -359,6 +368,14 @@ public:
 		TextureLayout prev_layout = TEXTURE_LAYOUT_UNDEFINED;
 		TextureLayout next_layout = TEXTURE_LAYOUT_UNDEFINED;
 		TextureSubresourceRange subresources;
+	};
+
+	struct AccelerationStructureBarrier {
+		AccelerationStructureID acceleration_structure;
+		BitField<BarrierAccessBits> src_access;
+		BitField<BarrierAccessBits> dst_access;
+		uint64_t offset = 0;
+		uint64_t size = 0;
 	};
 
 	virtual void command_pipeline_barrier(
@@ -465,6 +482,10 @@ public:
 	/**** SHADER ****/
 	/****************/
 
+
+	virtual String shader_get_binary_cache_key() = 0;
+	virtual Vector<uint8_t> shader_compile_binary_from_spirv(VectorView<ShaderStageSPIRVData> p_spirv, const String &p_shader_name) = 0;
+
 	struct ImmutableSampler {
 		UniformType type = UNIFORM_TYPE_MAX;
 		uint32_t binding = 0xffffffff; // Binding index as specified in shader.
@@ -543,6 +564,28 @@ public:
 	/******************/
 
 	virtual void pipeline_free(PipelineID p_pipeline) = 0;
+
+	// ----- RAY TRACING -----
+
+	enum AccelerationStructureType {
+		ACCELERATION_STRUCTURE_TYPE_BLAS,
+		ACCELERATION_STRUCTURE_TYPE_TLAS
+	};
+
+	enum GeometryBits {
+		GEOMETRY_OPAQUE = (1 << 0),
+		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
+	};
+
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) = 0;
+	virtual AccelerationStructureID tlas_create(BufferID p_instance_buffer) = 0;
+	virtual void tlas_instances_buffer_fill(const LocalVector<AccelerationStructureID> &p_blasses, const Vector<Transform3D> &p_transforms, BufferID p_instance_buffer) = 0;
+	virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
+	virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
+	virtual void free_acceleration_structure(AccelerationStructureID p_acceleration_structure) = 0;
+
+	virtual RayTracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) = 0;
+	virtual void raytracing_pipeline_free(RayTracingPipelineID p_pipeline) = 0;
 
 	// ----- BINDING -----
 
@@ -745,6 +788,8 @@ public:
 		OBJECT_TYPE_SHADER,
 		OBJECT_TYPE_UNIFORM_SET,
 		OBJECT_TYPE_PIPELINE,
+		OBJECT_TYPE_ACCELERATION_STRUCTURE,
+		OBJECT_TYPE_RAYTRACING_PIPELINE
 	};
 
 	struct MultiviewCapabilities {

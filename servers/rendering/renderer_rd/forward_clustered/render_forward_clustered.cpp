@@ -1471,8 +1471,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	p_render_data->shadows.clear();
 	p_render_data->directional_shadows.clear();
 
+	bool raytraced_shadows = RendererRayTraceSettings::get_singleton()->get_shadows();
+
 	float lod_distance_multiplier = p_render_data->scene_data->cam_projection.get_lod_multiplier();
-	{
+	if (!raytraced_shadows) {
 		for (int i = 0; i < p_render_data->render_shadow_count; i++) {
 			RID li = p_render_data->render_shadows[i].light;
 			RID base = light_storage->light_instance_get_base_light(li);
@@ -1502,7 +1504,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	// Render GI
 
-	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
+	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size() && !raytraced_shadows;
 	bool render_gi = rb.is_valid() && p_use_gi;
 
 	if (render_shadows && render_gi) {
@@ -1570,7 +1572,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		current_cluster_builder->begin(p_render_data->scene_data->cam_transform, p_render_data->scene_data->cam_projection, !p_render_data->reflection_probe.is_valid());
 	}
 
-	bool using_shadows = true;
+	bool using_shadows = !raytraced_shadows;
 
 	if (p_render_data->reflection_probe.is_valid()) {
 		if (!RSG::light_storage->reflection_probe_renders_shadows(light_storage->reflection_probe_instance_get_probe(p_render_data->reflection_probe))) {
