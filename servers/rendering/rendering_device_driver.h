@@ -137,7 +137,7 @@ public:
 	DEFINE_ID(Fence);
 	DEFINE_ID(Semaphore);
 	DEFINE_ID(AccelerationStructure);
-	DEFINE_ID(RayTracingPipeline);
+	DEFINE_ID(RaytracingPipeline);
 
 public:
 	/*****************/
@@ -318,7 +318,7 @@ public:
 		PIPELINE_STAGE_RAY_TRACING_SHADER_BIT = (2 << 20),
 		PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT = (1 << 22),
 		PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT = (1 << 23),
-		PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (1 << 24), // original code has 2 << 24, but i dont see the reason for this?..
+		PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT = (2 << 24),
 	};
 
 	enum BarrierAccessBits {
@@ -384,7 +384,8 @@ public:
 			BitField<PipelineStageBits> p_dst_stages,
 			VectorView<MemoryBarrier> p_memory_barriers,
 			VectorView<BufferBarrier> p_buffer_barriers,
-			VectorView<TextureBarrier> p_texture_barriers) = 0;
+			VectorView<TextureBarrier> p_texture_barriers,
+			VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) = 0;
 
 	/****************/
 	/**** FENCES ****/
@@ -483,8 +484,8 @@ public:
 	/****************/
 
 
-	virtual String shader_get_binary_cache_key() = 0;
-	virtual Vector<uint8_t> shader_compile_binary_from_spirv(VectorView<ShaderStageSPIRVData> p_spirv, const String &p_shader_name) = 0;
+	//virtual String shader_get_binary_cache_key() = 0;
+	//virtual Vector<uint8_t> shader_compile_binary_from_spirv(VectorView<ShaderStageSPIRVData> p_spirv, const String &p_shader_name) = 0;
 
 	struct ImmutableSampler {
 		UniformType type = UNIFORM_TYPE_MAX;
@@ -559,13 +560,9 @@ public:
 	virtual void command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) = 0;
 	virtual void command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) = 0;
 
-	/******************/
-	/**** PIPELINE ****/
-	/******************/
-
-	virtual void pipeline_free(PipelineID p_pipeline) = 0;
-
-	// ----- RAY TRACING -----
+	/********************/
+	/**** RAYTRACING ****/
+	/********************/
 
 	enum AccelerationStructureType {
 		ACCELERATION_STRUCTURE_TYPE_BLAS,
@@ -577,15 +574,30 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) = 0;
-	virtual AccelerationStructureID tlas_create(BufferID p_instance_buffer) = 0;
-	virtual void tlas_instances_buffer_fill(const LocalVector<AccelerationStructureID> &p_blasses, const Vector<Transform3D> &p_transforms, BufferID p_instance_buffer) = 0;
-	virtual uint32_t get_acceleration_structure_scratch_size(AccelerationStructureID p_acceleration_structure) = 0;
-	virtual uint32_t get_tlas_instances_buffer_size(uint32_t p_instance_count) = 0;
-	virtual void free_acceleration_structure(AccelerationStructureID p_acceleration_structure) = 0;
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) = 0;
+	virtual uint32_t tlas_instances_buffer_get_size_bytes(uint32_t p_instance_count) = 0;
+	virtual void tlas_instances_buffer_fill(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blases, const Vector<Transform3D> &p_transforms) = 0;
+	virtual AccelerationStructureID tlas_create(BufferID p_instances_buffer) = 0;
+	virtual void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) = 0;
+	virtual uint32_t acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) = 0;
 
-	virtual RayTracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) = 0;
-	virtual void raytracing_pipeline_free(RayTracingPipelineID p_pipeline) = 0;
+	// ----- PIPELINE -----
+
+	virtual RaytracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) = 0;
+	virtual void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) = 0;
+
+	// ----- COMMANDS -----
+
+	virtual void command_build_acceleration_structure(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) = 0;
+	virtual void command_bind_raytracing_pipeline(CommandBufferID p_cmd_buffer, RaytracingPipelineID p_pipeline) = 0;
+	virtual void command_bind_raytracing_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) = 0;
+	virtual void command_trace_rays(CommandBufferID p_cmd_buffer, uint32_t p_width, uint32_t p_height) = 0;
+
+	/******************/
+	/**** PIPELINE ****/
+	/******************/
+
+	virtual void pipeline_free(PipelineID p_pipeline) = 0;
 
 	// ----- BINDING -----
 

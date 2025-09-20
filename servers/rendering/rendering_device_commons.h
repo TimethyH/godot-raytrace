@@ -636,7 +636,7 @@ public:
 		UNIFORM_TYPE_UNIFORM_BUFFER, // Regular uniform buffer (or UBO).
 		UNIFORM_TYPE_STORAGE_BUFFER, // Storage buffer ("buffer" qualifier) like UBO, but supports storage, for compute mostly.
 		UNIFORM_TYPE_INPUT_ATTACHMENT, // Used for sub-pass read/write, for mobile mostly.
-		UNIFORM_TYPE_ACCELERATION_STRUCTURE, // Top and Bottom level acceleration structures for raytracing.
+		UNIFORM_TYPE_ACCELERATION_STRUCTURE, // Bounding Volume Hierarchy (Top + Bottom Level acceleration structures), for raytracing only.
 		UNIFORM_TYPE_MAX
 	};
 
@@ -758,9 +758,9 @@ public:
 	};
 
 	enum PipelineType {
-		RASTERIZATION,
-		COMPUTE,
-		RAYTRACING
+		PIPELINE_TYPE_RASTERIZATION,
+		PIPELINE_TYPE_COMPUTE,
+		PIPELINE_TYPE_RAYTRACING,
 	};
 
 	struct PipelineRasterizationState {
@@ -1078,7 +1078,7 @@ public:
 	struct ShaderReflection {
 		uint64_t vertex_input_mask = 0;
 		uint32_t fragment_output_mask = 0;
-		PipelineType pipeline_type = RASTERIZATION;
+		PipelineType pipeline_type = PIPELINE_TYPE_RASTERIZATION;
 		bool has_multiview = false;
 		uint32_t compute_local_size[3] = {};
 		uint32_t push_constant_size = 0;

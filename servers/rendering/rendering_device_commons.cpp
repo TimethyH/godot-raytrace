@@ -977,10 +977,10 @@ Error RenderingDeviceCommons::reflect_spirv(VectorView<ShaderStageSPIRVData> p_s
 	const uint32_t spirv_size = p_spirv.size();
 	for (uint32_t i = 0; i < spirv_size; i++) {
 		ShaderStage stage = p_spirv[i].shader_stage;
-		ShaderStage stage_flag = (ShaderStage)(1 << p_spirv[i].shader_stage);
+		ShaderStage stage_flag = (ShaderStage)(1 << stage);
 
 		if (p_spirv[i].shader_stage == SHADER_STAGE_COMPUTE) {
-			r_reflection.pipeline_type = COMPUTE;
+			r_reflection.pipeline_type = PIPELINE_TYPE_COMPUTE;
 			ERR_FAIL_COND_V_MSG(spirv_size != 1, FAILED,
 					"Compute shaders can only receive one stage, dedicated to compute.");
 		}
@@ -988,7 +988,7 @@ Error RenderingDeviceCommons::reflect_spirv(VectorView<ShaderStageSPIRVData> p_s
 				"Stage " + String(SHADER_STAGE_NAMES[p_spirv[i].shader_stage]) + " submitted more than once.");
 
 		if (p_spirv[i].shader_stage == SHADER_STAGE_RAYGEN || p_spirv[i].shader_stage == SHADER_STAGE_ANY_HIT || p_spirv[i].shader_stage == SHADER_STAGE_CLOSEST_HIT || p_spirv[i].shader_stage == SHADER_STAGE_MISS || p_spirv[i].shader_stage == SHADER_STAGE_INTERSECTION) {
-			r_reflection.pipeline_type = RAYTRACING;
+			r_reflection.pipeline_type = PIPELINE_TYPE_RAYTRACING;
 		}
 		{
 			SpvReflectShaderModule module;
@@ -997,7 +997,7 @@ Error RenderingDeviceCommons::reflect_spirv(VectorView<ShaderStageSPIRVData> p_s
 			ERR_FAIL_COND_V_MSG(result != SPV_REFLECT_RESULT_SUCCESS, FAILED,
 					"Reflection of SPIR-V shader stage '" + String(SHADER_STAGE_NAMES[p_spirv[i].shader_stage]) + "' failed parsing shader.");
 
-			if (r_reflection.pipeline_type == COMPUTE) {
+			if (r_reflection.pipeline_type == PIPELINE_TYPE_COMPUTE) {
 				r_reflection.compute_local_size[0] = module.entry_points->local_size.x;
 				r_reflection.compute_local_size[1] = module.entry_points->local_size.y;
 				r_reflection.compute_local_size[2] = module.entry_points->local_size.z;

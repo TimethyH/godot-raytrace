@@ -133,7 +133,7 @@ private:
 		LocalVector<Chunk> chunks;
 	};
 
-	RD::PipelineType pipeline_type = RD::PipelineType::COMPUTE;
+	RD::PipelineType pipeline_type = RD::PipelineType::PIPELINE_TYPE_RASTERIZATION;
 
 	String name;
 

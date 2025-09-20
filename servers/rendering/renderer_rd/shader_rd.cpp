@@ -151,9 +151,9 @@ void ShaderRD::setup(const char *p_vertex_code, const char *p_fragment_code, con
 
 	if (p_compute_code) {
 		_add_stage(p_compute_code, STAGE_TYPE_COMPUTE);
-		pipeline_type = RD::COMPUTE;
+		pipeline_type = RD::PIPELINE_TYPE_COMPUTE;
 	} else {
-		pipeline_type = RD::RASTERIZATION;
+		pipeline_type = RD::PIPELINE_TYPE_RASTERIZATION;
 		if (p_vertex_code) {
 			_add_stage(p_vertex_code, STAGE_TYPE_VERTEX);
 		}
@@ -182,7 +182,7 @@ void ShaderRD::setup(const char *p_vertex_code, const char *p_fragment_code, con
 void ShaderRD::setup_raytracing(const char *p_raygen_code, const char *p_closest_hit_code, const char *p_miss_code, const char *p_any_hit_code, const char *p_intersection_code, const char *p_name) {
 	name = p_name;
 
-	pipeline_type = RD::PipelineType::RAYTRACING;
+	pipeline_type = RD::PipelineType::PIPELINE_TYPE_RAYTRACING;
 
 	if (p_raygen_code) {
 		_add_stage(p_raygen_code, STAGE_TYPE_RAYGEN);
@@ -203,12 +203,8 @@ void ShaderRD::setup_raytracing(const char *p_raygen_code, const char *p_closest
 	StringBuilder tohash;
 	tohash.append("[GodotVersionNumber]");
 	tohash.append(GODOT_VERSION_NUMBER);
-	tohash.append("[GODOT_VERSION_HASH]");
+	tohash.append("[GodotVersionHash]");
 	tohash.append(GODOT_VERSION_HASH);
-	tohash.append("[SpirvCacheKey]");
-	tohash.append(RenderingDevice::get_singleton()->get_shader_spirv_cache_key()); // huh?
-	tohash.append("[BinaryCacheKey]");
-	tohash.append(RenderingDevice::get_singleton()->get_shader_binary_cache_key()); // huh?
 	tohash.append("[Raygen]");
 	tohash.append(p_raygen_code ? p_raygen_code : "");
 	tohash.append("[ClosestHit]");
@@ -219,6 +215,7 @@ void ShaderRD::setup_raytracing(const char *p_raygen_code, const char *p_closest
 	tohash.append(p_any_hit_code ? p_any_hit_code : "");
 	tohash.append("[Intersection]");
 	tohash.append(p_intersection_code ? p_intersection_code : "");
+	tohash.append(Engine::get_singleton()->is_generate_spirv_debug_info_enabled() ? "1" : "0");
 
 	base_sha256 = tohash.as_string().sha256_text();
 }
@@ -346,13 +343,13 @@ Vector<String> ShaderRD::_build_variant_stage_sources(uint32_t p_variant, Compil
 	stage_sources.resize(RD::SHADER_STAGE_MAX);
 
 	switch (pipeline_type) {
-		case RD::COMPUTE: {
+		case RD::PIPELINE_TYPE_COMPUTE: {
 			// Compute Stage
 			StringBuilder builder;
 			_build_variant_code(builder, p_variant, p_data.version, stage_templates[STAGE_TYPE_COMPUTE]);
 			stage_sources.write[RD::SHADER_STAGE_COMPUTE] = builder.as_string();
 		} break;
-		case RD::RASTERIZATION: {
+		case RD::PIPELINE_TYPE_RASTERIZATION: {
 			// vertex stage
 			StringBuilder vert_builder;
 			_build_variant_code(vert_builder, p_variant, p_data.version, stage_templates[STAGE_TYPE_VERTEX]);
@@ -363,8 +360,7 @@ Vector<String> ShaderRD::_build_variant_stage_sources(uint32_t p_variant, Compil
 			_build_variant_code(frag_builder, p_variant, p_data.version, stage_templates[STAGE_TYPE_FRAGMENT]);
 			stage_sources.write[RD::SHADER_STAGE_FRAGMENT] = frag_builder.as_string();
 		} break;
-		case RD::RAYTRACING: {
-
+		case RD::PIPELINE_TYPE_RAYTRACING: {
 			// RayGen
 			StringBuilder raygen_builder;
 			_build_variant_code(raygen_builder, p_variant, p_data.version, stage_templates[STAGE_TYPE_RAYGEN]);
@@ -390,7 +386,8 @@ Vector<String> ShaderRD::_build_variant_stage_sources(uint32_t p_variant, Compil
 			_build_variant_code(intersection_builder, p_variant, p_data.version, stage_templates[STAGE_TYPE_INTERSECTION]);
 			stage_sources.write[RD::SHADER_STAGE_INTERSECTION] = intersection_builder.as_string();
 		} break;
-		default:
+		default: {
+		}
 	}
 
 	return stage_sources;
@@ -439,7 +436,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 	source_code.versions.resize(variant_defines.size());
 
 	for (int i = 0; i < source_code.versions.size(); i++) {
-		if (pipeline_type == RD::RASTERIZATION) {
+		if (pipeline_type == RD::PIPELINE_TYPE_RASTERIZATION) {
 			// vertex stage
 
 			StringBuilder builder;
@@ -452,7 +449,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		if (pipeline_type == RD::RASTERIZATION) {
+		if (pipeline_type == RD::PIPELINE_TYPE_RASTERIZATION) {
 			// fragment stage
 
 			StringBuilder builder;
@@ -465,7 +462,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		if (pipeline_type == RD::COMPUTE) {
+		if (pipeline_type == RD::PIPELINE_TYPE_COMPUTE) {
 			// compute stage
 
 			StringBuilder builder;
@@ -478,7 +475,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		if (pipeline_type == RD::RAYTRACING) {
+		if (pipeline_type == RD::PIPELINE_TYPE_RAYTRACING) {
 			// raygen stage
 
 			StringBuilder builder;
@@ -491,8 +488,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		
-		if (pipeline_type == RD::RAYTRACING) {
+		if (pipeline_type == RD::PIPELINE_TYPE_RAYTRACING) {
 			// closest hit stage
 
 			StringBuilder builder;
@@ -505,8 +501,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		
-		if (pipeline_type == RD::RAYTRACING) {
+		if (pipeline_type == RD::PIPELINE_TYPE_RAYTRACING) {
 			// miss stage
 
 			StringBuilder builder;
@@ -519,7 +514,7 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 			source_code.versions.write[i].stages.push_back(stage);
 		}
 
-		if (pipeline_type == RD::RAYTRACING) {
+		if (pipeline_type == RD::PIPELINE_TYPE_RAYTRACING) {
 			// any hit stage
 
 			StringBuilder builder;
@@ -531,8 +526,8 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 
 			source_code.versions.write[i].stages.push_back(stage);
 		}
-		
-		if (pipeline_type == RD::RAYTRACING) {
+
+		if (pipeline_type == RD::PIPELINE_TYPE_RAYTRACING) {
 			// intersection stage
 
 			StringBuilder builder;
@@ -544,7 +539,6 @@ RS::ShaderNativeSourceCode ShaderRD::version_get_native_source_code(RID p_versio
 
 			source_code.versions.write[i].stages.push_back(stage);
 		}
-
 	}
 
 	return source_code;
@@ -788,7 +782,7 @@ void ShaderRD::_compile_ensure_finished(Version *p_version) {
 }
 
 void ShaderRD::version_set_code(RID p_version, const HashMap<String, String> &p_code, const String &p_uniforms, const String &p_vertex_globals, const String &p_fragment_globals, const Vector<String> &p_custom_defines) {
-	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::RASTERIZATION);
+	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::PIPELINE_TYPE_RASTERIZATION);
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
@@ -825,7 +819,7 @@ void ShaderRD::version_set_code(RID p_version, const HashMap<String, String> &p_
 }
 
 void ShaderRD::version_set_compute_code(RID p_version, const HashMap<String, String> &p_code, const String &p_uniforms, const String &p_compute_globals, const Vector<String> &p_custom_defines) {
-	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::COMPUTE);
+	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::PIPELINE_TYPE_COMPUTE);
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
@@ -862,7 +856,7 @@ void ShaderRD::version_set_compute_code(RID p_version, const HashMap<String, Str
 }
 
 void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, String> &p_code, const String &p_uniforms, const String &p_raygen_globals, const String &p_closest_hit_globals, const String &p_miss_globals, const String &p_any_hit_globals, const String &p_intersection_globals, const Vector<String> &p_custom_defines) {
-	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::RAYTRACING);
+	ERR_FAIL_COND(pipeline_type != RenderingDeviceCommons::PIPELINE_TYPE_RAYTRACING);
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);

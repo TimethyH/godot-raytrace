@@ -332,10 +332,6 @@ RenderingDeviceGraph::ComputeListInstruction *RenderingDeviceGraph::_allocate_co
 	return reinterpret_cast<ComputeListInstruction *>(&compute_instruction_list.data[compute_list_data_offset]);
 }
 
-RenderingDeviceGraph::RaytracingListInstruction *RenderingDeviceGraph::_allocate_raytracing_list_instruction(uint32_t p_instruction_size) {
-	return nullptr;
-}
-
 void RenderingDeviceGraph::_check_discardable_attachment_dependency(ResourceTracker *p_resource_tracker, int32_t p_previous_command_index, int32_t p_command_index) {
 	if (!p_resource_tracker->is_discardable) {
 		return;
@@ -1989,7 +1985,7 @@ void RenderingDeviceGraph::add_raytracing_list_begin() {
 	raytracing_instruction_list.index++;
 }
 
-void RenderingDeviceGraph::add_raytracing_list_bind_pipeline(RDD::RayTracingPipelineID p_pipeline) {
+void RenderingDeviceGraph::add_raytracing_list_bind_pipeline(RDD::RaytracingPipelineID p_pipeline) {
 	RaytracingListBindPipelineInstruction *instruction = reinterpret_cast<RaytracingListBindPipelineInstruction *>(_allocate_raytracing_list_instruction(sizeof(RaytracingListBindPipelineInstruction)));
 	instruction->type = RaytracingListInstruction::TYPE_BIND_PIPELINE;
 	instruction->pipeline = p_pipeline;

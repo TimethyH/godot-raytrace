@@ -67,7 +67,7 @@ private:
 public:
 	typedef int64_t DrawListID;
 	typedef int64_t ComputeListID;
-	typedef int64_t RayTracingListID;
+	typedef int64_t RaytracingListID;
 
 	typedef String (*ShaderSPIRVGetCacheKeyFunction)(const RenderingDevice *p_render_device);
 	typedef Vector<uint8_t> (*ShaderCompileToSPIRVFunction)(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language, String *r_error, const RenderingDevice *p_render_device);
@@ -77,10 +77,6 @@ public:
 
 private:
 	static RenderingDevice *singleton;
-	
-	static ShaderCompileToSPIRVFunction compile_to_spirv_function;
-	static ShaderCacheFunction cache_function;
-	static ShaderSPIRVGetCacheKeyFunction get_spirv_cache_key_function;
 
 	RenderingContextDriver *context = nullptr;
 	RenderingDeviceDriver *driver = nullptr;
@@ -1193,16 +1189,16 @@ private:
 
 	RID_Owner<ComputePipeline, true> compute_pipeline_owner;
 
-	struct RayTracingPipeline {
+	struct RaytracingPipeline {
 		RID shader;
 		RDD::ShaderID shader_driver_id;
 		uint32_t shader_layout_hash = 0;
 		Vector<uint32_t> set_formats;
-		RDD::RayTracingPipelineID driver_id;
+		RDD::RaytracingPipelineID driver_id;
 		uint32_t push_constant_size = 0;
 	};
 
-	RID_Owner<RayTracingPipeline> raytracing_pipeline_owner;
+	RID_Owner<RaytracingPipeline> raytracing_pipeline_owner;
 
 public:
 	RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0, uint32_t p_for_render_pass = 0, const Vector<PipelineSpecializationConstant> &p_specialization_constants = Vector<PipelineSpecializationConstant>());
@@ -1231,8 +1227,6 @@ public:
 	int screen_get_pre_rotation_degrees(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID) const;
 	FramebufferFormatID screen_get_framebuffer_format(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID) const;
 	Error screen_free(DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID);
-	String get_shader_spirv_cache_key() const;
-	String get_shader_binary_cache_key() const;
 
 private:
 	// ------------ ACCELERATION STRUCTURE --------------------------
@@ -1240,7 +1234,7 @@ private:
 	struct InstancesBuffer {
 		Buffer buffer;
 		uint32_t instance_count;
-		Vector<RID> blasses;
+		Vector<RID> blases;
 	};
 
 	struct AccelerationStructure {
@@ -1468,7 +1462,7 @@ private:
 	/**** RAY TRACING LISTS ****/
 	/***************************/
 
-	struct RayTracingList {
+	struct RaytracingList {
 		bool active = false;
 		struct SetState {
 			uint32_t pipeline_expected_format = 0;
@@ -1482,7 +1476,7 @@ private:
 			SetState sets[MAX_UNIFORM_SETS];
 			uint32_t set_count = 0;
 			RID pipeline;
-			RDD::RayTracingPipelineID pipeline_driver_id;
+			RDD::RaytracingPipelineID pipeline_driver_id;
 			RID pipeline_shader;
 			RDD::ShaderID pipeline_shader_driver_id;
 			uint32_t pipeline_shader_layout_hash = 0;
@@ -1507,15 +1501,15 @@ private:
 #endif
 	};
 
-	RayTracingList raytracing_list;
-	RayTracingList::State raytracing_list_barrier_state;
+	RaytracingList raytracing_list;
+	RaytracingList::State raytracing_list_barrier_state;
 
 public:
-	RayTracingListID raytracing_list_begin();
-	void raytracing_list_bind_raytracing_pipeline(RayTracingListID p_list, RID p_raytracing_pipeline);
-	void raytracing_list_bind_uniform_set(RayTracingListID p_list, RID p_uniform_set, uint32_t p_index);
-	void raytracing_list_set_push_constant(RayTracingListID p_list, const void* p_data, uint32_t p_data_size);
-	void raytracing_list_trace_rays(RayTracingListID p_list, uint32_t p_width, uint32_t p_height);
+	RaytracingListID raytracing_list_begin();
+	void raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline);
+	void raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index);
+	void raytracing_list_set_push_constant(RaytracingListID p_list, const void* p_data, uint32_t p_data_size);
+	void raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_width, uint32_t p_height);
 	void raytracing_list_end();
 
 private:
@@ -1622,7 +1616,7 @@ private:
 		List<RenderPipeline> render_pipelines_to_dispose_of;
 		List<ComputePipeline> compute_pipelines_to_dispose_of;
 		List<AccelerationStructure> acceleration_structures_to_dispose_of;
-		List<RayTracingPipeline> raytracing_pipelines_to_dispose_of;
+		List<RaytracingPipeline> raytracing_pipelines_to_dispose_of;
 
 		// Pending asynchronous data transfer for buffers.
 		LocalVector<RDD::BufferID> download_buffer_staging_buffers;
@@ -1840,7 +1834,7 @@ private:
 
 	void _draw_list_set_push_constant(DrawListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
 	void _compute_list_set_push_constant(ComputeListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
-	void _raytracing_list_set_push_constant(RayTracingListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
+	void _raytracing_list_set_push_constant(RaytracingListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
 };
 
 VARIANT_ENUM_CAST(RenderingDevice::DeviceType)

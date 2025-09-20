@@ -94,15 +94,16 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 
 	struct AccelerationStructureCapabilities {
 		bool acceleration_structure_support = false;
-		uint32_t min_scratch_offset_allignment = 0;
+		uint32_t min_acceleration_structure_scratch_offset_alignment = 0;
 	};
 
 	struct RayTracingCapabilities {
-		bool raytracing_support = false;
+		bool raytracing_pipeline_support = false;
 		uint32_t shader_group_handle_size = 0;
 		uint32_t shader_group_handle_alignment = 0;
 		uint32_t shader_group_handle_size_aligned = 0;
 		uint32_t shader_group_base_alignment = 0;
+		bool validation = false;
 	};
 
 	struct DeviceFunctions {
@@ -122,6 +123,10 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 
 		// Debug device fault.
 		PFN_vkGetDeviceFaultInfoEXT GetDeviceFaultInfoEXT = nullptr;
+
+		// Raytracing extensions.
+		PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR = nullptr;
+		PFN_vkCreateRayTracingPipelinesKHR CreateRaytracingPipelinesKHR = nullptr;
 	};
 	// Debug marker extensions.
 	VkDebugReportObjectTypeEXT _convert_to_debug_report_objectType(VkObjectType p_object_type);
@@ -146,7 +151,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	ShaderCapabilities shader_capabilities;
 	StorageBufferCapabilities storage_buffer_capabilities;
 	RenderingShaderContainerFormatVulkan shader_container_format;
-	AccelerationStructureCapabilities acceleration_capabilities;
+	AccelerationStructureCapabilities acceleration_structure_capabilities;
 	RayTracingCapabilities raytracing_capabilities;
 	bool buffer_device_address_support = false;
 	bool vulkan_memory_model_support = false;
@@ -287,7 +292,8 @@ public:
 			BitField<PipelineStageBits> p_dst_stages,
 			VectorView<MemoryBarrier> p_memory_barriers,
 			VectorView<BufferBarrier> p_buffer_barriers,
-			VectorView<TextureBarrier> p_texture_barriers) override final;
+			VectorView<TextureBarrier> p_texture_barriers,
+			VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) override final;
 
 	/****************/
 	/**** FENCES ****/
@@ -628,35 +634,6 @@ public:
 			uint32_t p_render_subpass,
 			VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
 
-	// ----- RAYTRACING -----
-
-	struct AccelerationStructureInfo {
-		VkAccelerationStructureKHR vk_acceleration_structure = VK_NULL_HANDLE;
-
-		// the buffer the AS uses
-		BufferID buffer;
-
-		// scratch buffer data
-		uint32_t alignment;
-		uint32_t size;
-
-		// AS components
-		VkAccelerationStructureGeometryKHR geometry;
-		VkAccelerationStructureBuildRangeInfoKHR range_info;
-		VkAccelerationStructureBuildGeometryInfoKHR build_info;
-		LocalVector<VkAccelerationStructureInstanceKHR> instances;
-	};
-
-	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, BufferID p_index_buffer, VertexFormatID p_vertex_format, uint64_t p_index_offset_bytes, uint32_t p_vertex_offset, uint32_t p_vertex_count, uint32_t p_index_count, uint32_t p_index_format, uint32_t p_geometry_flags) override final;
-	void _create_acceleration_structure(VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_acceleration_info, VkAccelerationStructureTypeKHR p_type);
-	virtual void build_cmd_acceleration_structure(CommandBufferID p_cmd_id, AccelerationStructureID p_acceleration_id, BufferID p_scratch_buffer);
-	virtual RDD::AccelerationStructureID tlas_create(BufferID p_instance_buffer) override final;
-	virtual void tlas_buffer_instances_fill(const LocalVector<AccelerationStructureID> &p_blasses, const LocalVector<Transform3D> &p_transforms, BufferID p_instance_buffer) override final;
-	// To implement:
-	// Free acceleration struct
-	// get acceleration scratch size in byes
-	// get tlas instances buffer size
-
 	/*****************/
 	/**** COMPUTE ****/
 	/*****************/
@@ -674,7 +651,57 @@ public:
 
 	// ----- PIPELINE -----
 
+	virtual PipelineID compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
+
+	/********************/
+	/**** RAYTRACING ****/
+	/********************/
+
+	// ----- ACCELERATION STRUCTURE -----
+
+	struct AccelerationStructureInfo {
+		VkAccelerationStructureKHR vk_acceleration_structure = VK_NULL_HANDLE;
+		// Buffer used for the structure
+		RDD::BufferID buffer;
+
+		// Aligmnent of the scratch buffer for building the structure
+		uint32_t scratch_alignment;
+		// Size of the scratch buffer for building the structure
+		uint32_t scratch_size;
+
+		// Buffer used for instances in a TLAS
+		RDD::BufferID instances_buffer;
+
+		// Required for building
+		VkAccelerationStructureGeometryKHR geometry;
+		LocalVector<VkAccelerationStructureInstanceKHR> instances;
+		VkAccelerationStructureBuildGeometryInfoKHR build_info;
+		VkAccelerationStructureBuildRangeInfoKHR range_info;
+	};
+
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) override final;
+	virtual uint32_t tlas_instances_buffer_get_size_bytes(uint32_t p_instance_count) override final;
+	virtual void tlas_instances_buffer_fill(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blases, const Vector<Transform3D> &p_transforms) override final;
+	virtual AccelerationStructureID tlas_create(BufferID p_instances_buffer) override final;
+	virtual void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) override final;
+	virtual uint32_t acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) override final;
+
 private:
+	void _acceleration_structure_create(VkAccelerationStructureTypeKHR p_type, VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_accel_info);
+
+public:
+	// ----- COMMANDS -----
+
+	virtual void command_build_acceleration_structure(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) override final;
+	virtual void command_bind_raytracing_pipeline(CommandBufferID p_cmd_buffer, RaytracingPipelineID p_pipeline) override final;
+	virtual void command_bind_raytracing_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) override final;
+	virtual void command_trace_rays(CommandBufferID p_cmd_buffer, uint32_t p_width, uint32_t p_height) override final;
+
+private:
+	RaytracingPipelineID bound_raytracing_pipeline_id;
+
+	// ----- PIPELINE -----
+
 	struct RaytracingShaderRegions {
 		VkStridedDeviceAddressRegionKHR raygen;
 		VkStridedDeviceAddressRegionKHR hit;
@@ -692,12 +719,9 @@ private:
 	};
 
 public:
-	virtual PipelineID compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
-
-	virtual RayTracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
-	VkResult _raytracing_pipeline_stb_create(RayTracingPipelineID p_pipeline, ShaderID p_shader);
-	virtual void raytracing_pipeline_free(RayTracingPipelineID p_pipeline) override final;
-
+	virtual RaytracingPipelineID raytracing_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override final;
+	VkResult _raytracing_pipeline_stb_create(RaytracingPipelineID p_pipeline, ShaderID p_shader);
+	virtual void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) override final;
 
 	/*****************/
 	/**** QUERIES ****/
