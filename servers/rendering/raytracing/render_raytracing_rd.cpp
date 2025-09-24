@@ -1,6 +1,6 @@
-#include "servers/rendering/raytracing/render_raytracing_rd.h"
+#include "render_raytracing_rd.h"
 
-//#include "servers/rendering/renderer_rd/shaders/raytracing/basic_raytrace.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/raytracing/basic_raytrace.glsl.gen.h"
 
 namespace RendererRD {
 void RaytraceRD::_trace_rays() {
