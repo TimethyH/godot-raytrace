@@ -20,6 +20,25 @@ public:
 	RaytraceRD();
 	~RaytraceRD();
 
+	void _trace_rays();
+
+
+	struct RaySceneState {
+		struct UBO {
+			float combined_reprojection[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 128
+			float view_inv_projections[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 256
+			float view_eye_offsets[RendererSceneRender::MAX_RENDER_VIEWS][4]; // 2 x 16 - 288
+		};
+
+		UBO ubo;
+
+		RID render_target;
+	};
+
 private:
+	// 128 is the max size of a push constant.
+	struct rayPushConstant {
+		float clear_color[3];
+	};
 };
 }
