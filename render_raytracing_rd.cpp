@@ -123,24 +123,24 @@ void RaytraceRD::_trace_rays() {
 	
 	// TODO Begin render label
 
-	RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	//RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
 
-	rd->raytracing_list_begin();
+	//rd->raytracing_list_begin();
 
-	rd->acceleration_structure_build(); // blas
-	rd->acceleration_structure_build(); // tlas
+	//rd->acceleration_structure_build(); // blas
+	//rd->acceleration_structure_build(); // tlas
 
-	rd->raytracing_list_bind_raytracing_pipeline(); // bind list
+	//rd->raytracing_list_bind_raytracing_pipeline(); // bind list
 
-	// Bind resources
-	rd->raytracing_list_bind_uniform_set();
-	rd->raytracing_list_set_push_constant();
+	//// Bind resources
+	//rd->raytracing_list_bind_uniform_set();
+	//rd->raytracing_list_set_push_constant();
 
-	rd->raytracing_list_trace_rays(); // width height
+	//rd->raytracing_list_trace_rays(); // width height
 
-	// Pipeline barier function here
+	//// Pipeline barier function here
 
-	rd->raytracing_list_end();
+	//rd->raytracing_list_end();
 
 	// TODO End label
 }
