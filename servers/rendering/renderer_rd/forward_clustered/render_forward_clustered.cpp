@@ -46,6 +46,12 @@ using namespace RendererSceneRenderImplementation;
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
+#define RAYTRACING_TEST
+
+#ifdef RAYTRACING_TEST
+#include "servers/rendering/raytracing/render_raytracing_rd.h"
+#endif
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -2119,6 +2125,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
+#ifndef RAYTRACING_TEST
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -2186,7 +2193,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}
+#else
 
+	RendererRD::RaytraceRD test;
+	test.init();
+
+#endif
 	{
 		if (ce_post_opaque_resolved_color) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
@@ -2355,6 +2367,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_begin_label("Render 3D Transparent Pass");
 
+#ifdef RAYTRACING_TEST
+	RID rp_uniform_set;
+#endif
 	rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, radiance_texture, samplers, true);
 
 	_setup_environment(p_render_data, is_reflection_probe, screen_size, p_default_bg_color, false);

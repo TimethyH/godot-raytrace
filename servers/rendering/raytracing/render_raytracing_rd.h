@@ -19,12 +19,12 @@ class RenderSceneBuffersRD;
 
 class RaytraceRD {
 public:
-	RaytraceRD();
+	//RaytraceRD();
 	void init();
 
-	~RaytraceRD();
+	//~RaytraceRD();
 
-	void _trace_rays();
+	void trace_rays(RenderSceneDataRD &scene_data);
 
 	struct RaySceneState {
 		struct UBO {
