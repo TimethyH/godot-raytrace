@@ -38,8 +38,11 @@ public:
 
 		UBO ubo;
 
+		RID uniform_buffer;
+		RID uniform_set;
+
 		RID render_target;
-	};
+	}ray_scene_state;
 
 private:
 	// 128 is the max size of a push constant.

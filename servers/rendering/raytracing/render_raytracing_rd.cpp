@@ -60,6 +60,18 @@ void RaytraceRD::init() {
 	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
 
 	// Set uniform bindings
+	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
+
+	Vector<RD::Uniform> uniforms;
+	{
+		RD::Uniform u;
+		u.binding = 0;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.append_id(ray_scene_state.uniform_buffer);
+		uniforms.push_back(u);
+	}
+
+	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
 }
 
 void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data) {
