@@ -46,6 +46,12 @@ using namespace RendererSceneRenderImplementation;
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
+#define RAYTRACING_TEST
+
+#ifdef RAYTRACING_TEST
+#include "servers/rendering/raytracing/render_raytracing_rd.h"
+#endif
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -1648,8 +1654,6 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 	}
 }
 
-#define RAYTRACING_TEST
-
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
@@ -2190,6 +2194,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 #else
+
+	RendererRD::RaytraceRD test;
+	test.init();
 
 #endif
 	{
