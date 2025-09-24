@@ -147,7 +147,7 @@ void main() {
 )<!>"
 		};
 
-		static const char *_miss_code[] = {
+		static const char _miss_code[] = {
 			R"<!>(
 #version 450
 
@@ -172,6 +172,6 @@ static const char *_anyhit_code = nullptr;
 static const char *_intersection_code = nullptr;
 		
 
-		setup_raytracing(_raygen_code, _closest_hit_code, _anyhit_code, _intersection_code, "BasicRaytraceRD");
+		setup_raytracing(_raygen_code, _closest_hit_code, _miss_code, _anyhit_code, _intersection_code, "BasicRaytraceRD");
 	}
 };
