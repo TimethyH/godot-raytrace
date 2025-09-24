@@ -18,7 +18,11 @@ class RenderSceneBuffersRD;
 class RaytraceRD {
 public:
 	RaytraceRD();
+	void init();
+
 	~RaytraceRD();
+
+
 
 	void _trace_rays();
 
@@ -28,6 +32,9 @@ public:
 			float combined_reprojection[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 128
 			float view_inv_projections[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 256
 			float view_eye_offsets[RendererSceneRender::MAX_RENDER_VIEWS][4]; // 2 x 16 - 288
+
+			float z_near; // 4 - 292
+			float z_far; // 4 - 296
 		};
 
 		UBO ubo;
