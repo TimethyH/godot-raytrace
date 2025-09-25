@@ -40,6 +40,13 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 
+#if defined(VULKAN_ENABLED)
+#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+#endif
+#if defined(METAL_ENABLED)
+#include "drivers/metal/rendering_context_driver_metal.h"
+#endif
+
 using namespace RendererSceneRenderImplementation;
 
 #define PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION 1
@@ -47,10 +54,6 @@ using namespace RendererSceneRenderImplementation;
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
 #define RAYTRACING_TEST
-
-#ifdef RAYTRACING_TEST
-#include "servers/rendering/raytracing/render_raytracing_rd.h"
-#endif
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
@@ -2195,9 +2198,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 #else
 
-	RendererRD::RaytraceRD test;
-	test.init();
-
 #endif
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -3802,6 +3802,114 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
+void RendererSceneRenderImplementation::RenderForwardClustered::_trace_rays(RenderSceneDataRD &scene_data) {
+	// TODO Begin render label
+
+	//RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+
+	//rd->raytracing_list_begin();
+
+	//rd->acceleration_structure_build(); // blas
+	//rd->acceleration_structure_build(); // tlas
+
+	//rd->raytracing_list_bind_raytracing_pipeline(); // bind list
+
+	//// Bind resources
+	//rd->raytracing_list_bind_uniform_set();
+	//rd->raytracing_list_set_push_constant();
+
+	//rd->raytracing_list_trace_rays(); // width height
+
+	//// Pipeline barier function here
+
+	//rd->raytracing_list_end();
+
+	// TODO End label
+}
+
+RID RendererSceneRenderImplementation::RenderForwardClustered::_create_blas_for_mesh(RID mesh_instance_rid, uint64_t surface_index) {
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+
+	// Get vertex array RID and format from mesh instance
+	RID vertex_array_rd;
+	RD::VertexFormatID vertex_format;
+	uint64_t input_mask = (1 << RS::ARRAY_VERTEX); // At minimum, we need positions
+	bool input_motion_vectors = false;
+
+	mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(
+			mesh_instance_rid,
+			surface_index,
+			input_mask,
+			input_motion_vectors,
+			vertex_array_rd,
+			vertex_format);
+
+	if (!vertex_array_rd.is_valid()) {
+		ERR_PRINT("Failed to get vertex array for mesh instance");
+		return RID();
+	}
+
+	// Get index array RID
+	void *surface = mesh_storage->mesh_get_surface(mesh_instance_rid, surface_index);
+	RID index_array_rd = mesh_storage->mesh_surface_get_index_array(surface, 0);
+
+	if (!index_array_rd.is_valid()) {
+		ERR_PRINT("Failed to get index array for mesh surface");
+		return RID();
+	}
+
+	// Create BLAS with the simple API
+	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+	RID blas_rid = rd->blas_create(
+			vertex_array_rd,
+			index_array_rd,
+			geometry_bits);
+
+	return blas_rid;
+}
+
+void RendererSceneRenderImplementation::RenderForwardClustered::_collect_raytracing_instances(RenderDataRD *p_render_data) {
+	//RendererSceneRenderRD *scene_render = RendererSceneRenderRD::get_singleton();
+	//RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+
+	//// Get visible instances from the render data
+	//const PagedArray<RenderGeometryInstance *> *instances = p_render_data->instances;
+	//LocalVector<RID> blases;
+
+	//for (uint64_t i = 0; i < instances->size(); i++) {
+	//	RenderGeometryInstanceBase *instance = static_cast<RenderGeometryInstanceBase *>((*instances)[i]);
+	//	//MeshInstance3D mesh_instance = static_cast<MeshInstance3D>(instance->mesh_instance);
+	//	RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->get_mesh_instance(instance->mesh_instance);
+
+	//	blases.push_back(create_blas_for_mesh(instance->mesh_instance));
+
+	//	// Check if this instance has a mesh
+	//	RID mesh_rid = scene_render->instance_get_base(instance_rid);
+	//	if (mesh_rid.is_null()) {
+	//		continue;
+	//	}
+
+	//	// Check if it's actually a mesh (not a light, particle system, etc.)
+	//	if (scene_render->instance_get_base_type(instance_rid) != RS::INSTANCE_MESH) {
+	//		continue;
+	//	}
+
+	//	// Get the mesh owner
+	//	RendererMeshStorage::Mesh *mesh = mesh_storage->get_mesh(mesh_rid);
+	//	if (!mesh) {
+	//		continue;
+	//	}
+
+	//	// Get transform for this instance
+	//	Transform3D transform = scene_render->instance_get_transform(instance_rid);
+
+	//	// Process this mesh instance for raytracing
+	//	process_mesh_for_raytracing(instance_rid, mesh_rid, mesh, transform);
+	//}
+}
+
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {
 	Ref<RenderBufferDataForwardClustered> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
 
@@ -5060,6 +5168,50 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
+
+	/* raytracing */
+
+	RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	RenderingContextDriver *rcd = nullptr;
+
+	Error err;
+
+	if (rd == nullptr) {
+#if defined(RD_ENABLED)
+#if defined(METAL_ENABLED)
+		rcd = memnew(RenderingContextDriverMetal);
+		rd = memnew(RenderingDevice);
+#endif
+#if defined(VULKAN_ENABLED)
+		if (rcd == nullptr) {
+			rcd = memnew(RenderingContextDriverVulkan);
+			rd = memnew(RenderingDevice);
+		}
+#endif
+#endif
+		if (rcd != nullptr && rd != nullptr) {
+			err = rcd->initialize();
+			if (err == OK) {
+				err = rd->initialize(rcd);
+			}
+
+			if (err != OK) {
+				memdelete(rd);
+				memdelete(rcd);
+				rd = nullptr;
+				rcd = nullptr;
+			}
+		}
+	}
+
+	Vector<String> variants;
+	variants.push_back("");
+	raytracing_shader.initialize(variants);
+
+	RID version = raytracing_shader.version_create(true);
+	RID shader = raytracing_shader.version_get_shader(version, 0);
+
+	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
 }
 
 RenderForwardClustered::~RenderForwardClustered() {

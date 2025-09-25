@@ -45,6 +45,8 @@
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
+#include "servers/rendering/raytracing/basic_raytrace.glsl.gen.h"
+
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
 
 #define RB_TEX_SPECULAR SNAME("specular")
@@ -757,6 +759,37 @@ private:
 
 	/* Debug */
 	void _debug_draw_cluster(Ref<RenderSceneBuffersRD> p_render_buffers);
+
+public:
+	/* Raytracing */
+	struct RaySceneState {
+		struct UBO {
+			float combined_reprojection[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 128
+			float view_inv_projections[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 256
+			float view_eye_offsets[RendererSceneRender::MAX_RENDER_VIEWS][4]; // 2 x 16 - 288
+
+			float z_near; // 4 - 292
+			float z_far; // 4 - 296
+		};
+
+		UBO ubo;
+
+		RID render_target;
+	};
+
+	void _trace_rays(RenderSceneDataRD &scene_data);
+	RID _create_blas_for_mesh(RID mesh_instance_rid, uint64_t surface_index);
+	void _collect_raytracing_instances(RenderDataRD *p_render_data);
+
+private:
+	// 128 is the max size of a push constant.
+	struct rayPushConstant {
+		float clear_color[3] = { 1.0f, 0.0f, 0.0f }; // 12
+	};
+
+	rayPushConstant ray_pc;
+
+	BasicRaytraceRD raytracing_shader;
 
 protected:
 	/* setup */
