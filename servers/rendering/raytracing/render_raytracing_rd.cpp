@@ -74,29 +74,33 @@ void RaytraceRD::init() {
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
 }
 
-void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data) {
-	
-	// TODO Begin render label
+void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data) {
 
-	//RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	RayPushConstant ray_push_constant;
 
-	//rd->raytracing_list_begin();
+	memset(&ray_push_constant, 0, sizeof(RayPushConstant));
 
-	//rd->acceleration_structure_build(); // blas
-	//rd->acceleration_structure_build(); // tlas
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	//rd->raytracing_list_bind_raytracing_pipeline(); // bind list
+	rd->draw_command_begin_label("Trace rays");
 
-	//// Bind resources
-	//rd->raytracing_list_bind_uniform_set();
-	//rd->raytracing_list_set_push_constant();
+	RD::RaytracingListID LID = rd->raytracing_list_begin();
 
-	//rd->raytracing_list_trace_rays(); // width height
+	rd->acceleration_structure_build(); // blas
+	rd->acceleration_structure_build(); // tlas
 
-	//// Pipeline barier function here
+	rd->raytracing_list_bind_raytracing_pipeline(LID); // bind list
 
-	//rd->raytracing_list_end();
+	// Bind resources
+	rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
+	rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
 
-	// TODO End label
+	rd->raytracing_list_trace_rays(LID, 800, 800); // width height
+
+	// Pipeline barier function here
+
+	rd->raytracing_list_end();
+
+	rd->draw_command_end_label();
 }
 } //namespace RendererRD

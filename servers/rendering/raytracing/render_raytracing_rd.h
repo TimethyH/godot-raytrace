@@ -24,7 +24,7 @@ public:
 
 	//~RaytraceRD();
 
-	void trace_rays(RenderSceneDataRD &scene_data);
+	void trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data);
 
 	struct RaySceneState {
 		struct UBO {
@@ -46,11 +46,11 @@ public:
 
 private:
 	// 128 is the max size of a push constant.
-	struct rayPushConstant {
+	struct RayPushConstant {
 		float clear_color[3] = { 1.0f, 0.0f, 0.0f }; // 12
 	};
 
-	rayPushConstant ray_pc;
+	//RayPushConstant ray_pc;
 
 	struct RaytracingShader {
 		BasicRaytraceRD shader;
