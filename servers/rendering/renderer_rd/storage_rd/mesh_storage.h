@@ -38,6 +38,8 @@
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+#include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
+
 namespace RendererRD {
 
 class MeshStorage : public RendererMeshStorage {
@@ -64,6 +66,7 @@ public:
 
 private:
 	static MeshStorage *singleton;
+	friend class RendererSceneRenderImplementation::RenderForwardClustered;
 
 	RID default_rd_storage_buffer;
 
@@ -364,6 +367,7 @@ public:
 
 	/* MESH API */
 
+	Mesh *get_mesh(RID p_rid) { return mesh_owner.get_or_null(p_rid); }
 	bool owns_mesh(RID p_rid) { return mesh_owner.owns(p_rid); }
 
 	virtual RID mesh_allocate() override;

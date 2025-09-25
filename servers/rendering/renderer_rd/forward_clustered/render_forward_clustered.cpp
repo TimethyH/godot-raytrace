@@ -2197,7 +2197,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 #else
+	static bool first_frame = true;
 
+	if (first_frame) {
+		_create_blases(p_render_data);
+		first_frame = false;
+	}
 #endif
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -3827,87 +3832,53 @@ void RendererSceneRenderImplementation::RenderForwardClustered::_trace_rays(Rend
 	// TODO End label
 }
 
-RID RendererSceneRenderImplementation::RenderForwardClustered::_create_blas_for_mesh(RID mesh_instance_rid, uint64_t surface_index) {
+void RendererSceneRenderImplementation::RenderForwardClustered::_create_blases(RenderDataRD *p_render_data) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	// Get vertex array RID and format from mesh instance
-	RID vertex_array_rd;
-	RD::VertexFormatID vertex_format;
-	uint64_t input_mask = (1 << RS::ARRAY_VERTEX); // At minimum, we need positions
-	bool input_motion_vectors = false;
+	// Get visible instances from the render data
+	const PagedArray<RenderGeometryInstance *> *instances = p_render_data->instances;
+	LocalVector<RID> blases;
 
-	mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(
-			mesh_instance_rid,
-			surface_index,
-			input_mask,
-			input_motion_vectors,
-			vertex_array_rd,
-			vertex_format);
+	for (uint64_t i = 0; i < instances->size(); i++) {
+		GeometryInstanceForwardClustered *instance = static_cast<GeometryInstanceForwardClustered *>((*instances)[i]);
 
-	if (!vertex_array_rd.is_valid()) {
-		ERR_PRINT("Failed to get vertex array for mesh instance");
-		return RID();
+		RID mesh_rid = instance->data->base;
+		RS::InstanceType type = instance->data->base_type;
+
+		if (type == RS::INSTANCE_MESH) {
+			RendererRD::MeshStorage::Mesh *mesh = mesh_storage->get_mesh(mesh_rid);
+			uint32_t surface_count = mesh->surface_count;
+			for (uint32_t j = 0; j < surface_count; j++)
+			{
+				RendererRD::MeshStorage::Mesh::Surface *surface = mesh->surfaces[j];
+
+				uint64_t raytracing_input_mask =
+						RS::ARRAY_FORMAT_VERTEX |
+						RS::ARRAY_FORMAT_NORMAL |
+						RS::ARRAY_FORMAT_TEX_UV;
+
+				RID index_array_surface = surface->index_array;
+				RID vertex_array_surface;
+				RenderingDevice::VertexFormatID vertex_format;
+
+				mesh_storage->mesh_surface_get_vertex_arrays_and_format(surface, raytracing_input_mask, false, vertex_array_surface, vertex_format);
+
+				if (!vertex_array_surface.is_valid()) {
+					ERR_PRINT("Failed to get vertex array for mesh surface");
+					continue;
+				}
+
+				// Create BLAS with the simple API
+				BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+				blases.push_back(rd->blas_create(
+						vertex_array_surface,
+						index_array_surface,
+						geometry_bits));
+			}
+		}
 	}
-
-	// Get index array RID
-	void *surface = mesh_storage->mesh_get_surface(mesh_instance_rid, surface_index);
-	RID index_array_rd = mesh_storage->mesh_surface_get_index_array(surface, 0);
-
-	if (!index_array_rd.is_valid()) {
-		ERR_PRINT("Failed to get index array for mesh surface");
-		return RID();
-	}
-
-	// Create BLAS with the simple API
-	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
-
-	RID blas_rid = rd->blas_create(
-			vertex_array_rd,
-			index_array_rd,
-			geometry_bits);
-
-	return blas_rid;
-}
-
-void RendererSceneRenderImplementation::RenderForwardClustered::_collect_raytracing_instances(RenderDataRD *p_render_data) {
-	//RendererSceneRenderRD *scene_render = RendererSceneRenderRD::get_singleton();
-	//RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-
-	//// Get visible instances from the render data
-	//const PagedArray<RenderGeometryInstance *> *instances = p_render_data->instances;
-	//LocalVector<RID> blases;
-
-	//for (uint64_t i = 0; i < instances->size(); i++) {
-	//	RenderGeometryInstanceBase *instance = static_cast<RenderGeometryInstanceBase *>((*instances)[i]);
-	//	//MeshInstance3D mesh_instance = static_cast<MeshInstance3D>(instance->mesh_instance);
-	//	RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->get_mesh_instance(instance->mesh_instance);
-
-	//	blases.push_back(create_blas_for_mesh(instance->mesh_instance));
-
-	//	// Check if this instance has a mesh
-	//	RID mesh_rid = scene_render->instance_get_base(instance_rid);
-	//	if (mesh_rid.is_null()) {
-	//		continue;
-	//	}
-
-	//	// Check if it's actually a mesh (not a light, particle system, etc.)
-	//	if (scene_render->instance_get_base_type(instance_rid) != RS::INSTANCE_MESH) {
-	//		continue;
-	//	}
-
-	//	// Get the mesh owner
-	//	RendererMeshStorage::Mesh *mesh = mesh_storage->get_mesh(mesh_rid);
-	//	if (!mesh) {
-	//		continue;
-	//	}
-
-	//	// Get transform for this instance
-	//	Transform3D transform = scene_render->instance_get_transform(instance_rid);
-
-	//	// Process this mesh instance for raytracing
-	//	process_mesh_for_raytracing(instance_rid, mesh_rid, mesh, transform);
-	//}
 }
 
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {

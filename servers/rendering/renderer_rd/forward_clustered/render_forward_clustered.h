@@ -778,8 +778,7 @@ public:
 	};
 
 	void _trace_rays(RenderSceneDataRD &scene_data);
-	RID _create_blas_for_mesh(RID mesh_instance_rid, uint64_t surface_index);
-	void _collect_raytracing_instances(RenderDataRD *p_render_data);
+	void _create_blases(RenderDataRD *p_render_data);
 
 private:
 	// 128 is the max size of a push constant.
