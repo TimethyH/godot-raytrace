@@ -95,11 +95,11 @@ Ref<RenderingShaderContainer> RenderingShaderContainerFormatVulkan::create_conta
 }
 
 RenderingDeviceCommons::ShaderLanguageVersion RenderingShaderContainerFormatVulkan::get_shader_language_version() const {
-	return SHADER_LANGUAGE_VULKAN_VERSION_1_1;
+	return SHADER_LANGUAGE_VULKAN_VERSION_1_4;
 }
 
 RenderingDeviceCommons::ShaderSpirvVersion RenderingShaderContainerFormatVulkan::get_shader_spirv_version() const {
-	return SHADER_SPIRV_VERSION_1_3;
+	return SHADER_SPIRV_VERSION_1_6;
 }
 
 void RenderingShaderContainerFormatVulkan::set_debug_info_enabled(bool p_debug_info_enabled) {

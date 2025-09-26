@@ -51,11 +51,19 @@ void RaytraceRD::init() {
 	}
 
 	Vector<String> variants;
-	variants.push_back("");
+	variants.push_back(" ");
 	raytracing_shader.shader.initialize(variants);
 
 	RID version = raytracing_shader.shader.version_create(true);
 	RID shader = raytracing_shader.shader.version_get_shader(version, 0);
+
+	// Specify the shader stages to get the compiled spriv source code
+	/*Vector<String> stage_names;
+	stage_names.push_back("raygen");
+	stage_names.push_back("closest_hit");
+	stage_names.push_back("miss");
+
+	Vector<RD::ShaderStageSPIRVData> shader_stage = raytracing_shader.shader.compile_stages(stage_names);*/
 
 	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
 
@@ -76,31 +84,31 @@ void RaytraceRD::init() {
 
 void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data) {
 
-	RayPushConstant ray_push_constant;
+	//RayPushConstant ray_push_constant;
 
-	memset(&ray_push_constant, 0, sizeof(RayPushConstant));
+	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
 
-	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	//RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	rd->draw_command_begin_label("Trace rays");
+	//rd->draw_command_begin_label("Trace rays");
 
-	RD::RaytracingListID LID = rd->raytracing_list_begin();
+	//RD::RaytracingListID LID = rd->raytracing_list_begin();
 
-	rd->acceleration_structure_build(); // blas
-	rd->acceleration_structure_build(); // tlas
+	//rd->acceleration_structure_build(); // blas
+	//rd->acceleration_structure_build(); // tlas
 
-	rd->raytracing_list_bind_raytracing_pipeline(LID); // bind list
+	//rd->raytracing_list_bind_raytracing_pipeline(LID); // bind list
 
-	// Bind resources
-	rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
-	rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
+	//// Bind resources
+	//rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
+	//rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
 
-	rd->raytracing_list_trace_rays(LID, 800, 800); // width height
+	//rd->raytracing_list_trace_rays(LID, 800, 800); // width height
 
-	// Pipeline barier function here
+	//// Pipeline barier function here
 
-	rd->raytracing_list_end();
+	//rd->raytracing_list_end();
 
-	rd->draw_command_end_label();
+	//rd->draw_command_end_label();
 }
 } //namespace RendererRD

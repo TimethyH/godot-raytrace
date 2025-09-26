@@ -9,7 +9,7 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/shader_compiler.h"
 
-#include "servers/rendering/raytracing/basic_raytrace.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/raytracing/basic_raytracing.glsl.gen.h"
 
 namespace RendererRD {
 
@@ -53,7 +53,7 @@ private:
 	//RayPushConstant ray_pc;
 
 	struct RaytracingShader {
-		BasicRaytraceRD shader;
+		BasicRaytracingShaderRD shader;
 		ShaderCompiler compiler;
 
 		RID default_shader;
