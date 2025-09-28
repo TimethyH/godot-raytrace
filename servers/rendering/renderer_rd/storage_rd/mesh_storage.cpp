@@ -214,6 +214,10 @@ bool MeshStorage::free(RID p_rid) {
 	return false;
 }
 
+LocalVector<RID> RendererRD::MeshStorage::mesh_get_owned_list() {
+	return mesh_owner.get_owned_list();
+}
+
 /* MESH API */
 
 RID MeshStorage::mesh_allocate() {

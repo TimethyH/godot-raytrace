@@ -52,6 +52,9 @@
 #include "servers/rendering/rendering_method.h"
 #include "servers/rendering/rendering_shader_library.h"
 
+#include "scene/3d/mesh_instance_3d.h"
+#include "servers/rendering/raytracing/basic_raytrace.glsl.gen.h"
+
 class RendererSceneRenderRD : public RendererSceneRender, public RenderingShaderLibrary {
 	friend RendererRD::SkyRD;
 	friend RendererRD::GI;
@@ -172,6 +175,17 @@ private:
 	uint32_t volumetric_fog_depth = 128;
 	bool volumetric_fog_filter_active = true;
 
+	/* Raytracing */
+
+	struct rayPushConstant {
+		float clear_color[3] = { 1.0f, 0.0f, 0.0f }; // 12
+	};
+
+	rayPushConstant ray_pc;
+	BasicRaytraceRD raytracing_shader;
+	LocalVector<RID> blases;
+	Node *last_scene = nullptr;
+
 public:
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
@@ -239,6 +253,28 @@ public:
 	virtual bool voxel_gi_needs_update(RID p_probe) const override;
 	virtual void voxel_gi_update(RID p_probe, bool p_update_light_instances, const Vector<RID> &p_light_instances, const PagedArray<RenderGeometryInstance *> &p_dynamic_objects) override;
 	virtual void voxel_gi_set_quality(RS::VoxelGIQuality p_quality) override { gi.voxel_gi_quality = p_quality; }
+
+	/* Raytracing */
+
+	struct RaySceneState {
+		struct UBO {
+			float combined_reprojection[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 128
+			float view_inv_projections[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 256
+			float view_eye_offsets[RendererSceneRender::MAX_RENDER_VIEWS][4]; // 2 x 16 - 288
+
+			float z_near; // 4 - 292
+			float z_far; // 4 - 296
+		};
+
+		UBO ubo;
+
+		RID render_target;
+	};
+
+	virtual void _trace_rays(RenderSceneDataRD &scene_data) {};
+	void _create_blas(Ref<Mesh> mesh);
+	void _collect_active_meshes_recursive(Node *node);
+	void _setup_raytracing_acceleration_structures();
 
 	/* render buffers */
 

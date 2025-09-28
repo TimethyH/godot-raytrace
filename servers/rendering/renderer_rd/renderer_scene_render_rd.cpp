@@ -42,6 +42,15 @@
 #include "servers/rendering/shader_include_db.h"
 #include "servers/rendering/storage/camera_attributes_storage.h"
 
+#if defined(VULKAN_ENABLED)
+#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+#endif
+#if defined(METAL_ENABLED)
+#include "drivers/metal/rendering_context_driver_metal.h"
+#endif
+
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+
 void get_vogel_disk(float *r_kernel, int p_sample_count) {
 	const float golden_angle = 2.4;
 
@@ -1102,6 +1111,132 @@ RID RendererSceneRenderRD::render_buffers_get_default_voxel_gi_buffer() {
 	return gi.default_voxel_gi_buffer;
 }
 
+void RendererSceneRenderRD::_create_blas(Ref<Mesh> mesh) {
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+
+	RID mesh_rid = mesh->get_rid();
+	uint32_t surface_count = mesh->get_surface_count();
+
+	PackedFloat32Array combined_vertices;
+	PackedInt32Array combined_indices;
+	uint32_t vertex_offset = 0;
+
+	for (uint32_t i = 0; i < surface_count; i++) {
+		Array surface_arrays = mesh->surface_get_arrays(i);
+		if (surface_arrays.is_empty()) {
+			continue;
+		}
+
+		PackedVector3Array vertices = surface_arrays[RS::ARRAY_VERTEX];
+		PackedVector3Array normals = surface_arrays[RS::ARRAY_NORMAL];
+		PackedVector2Array uvs = surface_arrays[RS::ARRAY_TEX_UV];
+		PackedInt32Array indices = surface_arrays[RS::ARRAY_INDEX];
+
+		if (vertices.is_empty() || indices.is_empty()) {
+			continue;
+		}
+
+		uint32_t vertex_count = vertices.size();
+
+		// Interleave vertex data: position (vec3), normal (vec3), uv (vec2)
+		for (uint32_t v = 0; v < vertex_count; v++) {
+			// Position
+			combined_vertices.push_back(vertices[v].x);
+			combined_vertices.push_back(vertices[v].y);
+			combined_vertices.push_back(vertices[v].z);
+
+			// Normal
+			if (!normals.is_empty() && normals.size() > v) {
+				combined_vertices.push_back(normals[v].x);
+				combined_vertices.push_back(normals[v].y);
+				combined_vertices.push_back(normals[v].z);
+			} else {
+				combined_vertices.push_back(0.0f);
+				combined_vertices.push_back(1.0f);
+				combined_vertices.push_back(0.0f);
+			}
+
+			// UV
+			if (!uvs.is_empty() && uvs.size() > v) {
+				combined_vertices.push_back(uvs[v].x);
+				combined_vertices.push_back(uvs[v].y);
+			} else {
+				combined_vertices.push_back(0.0f);
+				combined_vertices.push_back(0.0f);
+			}
+		}
+
+		// Combine index data with vertex offset
+		for (int j = 0; j < indices.size(); j++) {
+			combined_indices.push_back(indices[j] + vertex_offset);
+		}
+
+		vertex_offset += vertex_count;
+	}
+
+	if (combined_vertices.is_empty() || combined_indices.is_empty()) {
+		ERR_PRINT("No valid geometry data found for mesh");
+		return;
+	}
+
+	// Create combined buffers
+	RID combined_vertex_buffer = rd->vertex_buffer_create(combined_vertices.size() * sizeof(float));
+	RID combined_index_buffer = rd->index_buffer_create(combined_indices.size() * sizeof(uint32_t), RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
+
+	PackedByteArray combined_vertex_bytes = combined_vertices.to_byte_array();
+	PackedByteArray combined_index_bytes = combined_indices.to_byte_array();
+
+	// Upload data
+	rd->buffer_update(combined_vertex_buffer, 0, combined_vertices.size(), &combined_vertex_bytes);
+	rd->buffer_update(combined_index_buffer, 0, combined_indices.size(), &combined_index_bytes);
+
+	Vector<RID> vertex_vector;
+	vertex_vector.push_back(combined_vertex_buffer);
+
+	// Vertex format: position (vec3), normal (vec3), uv (vec2)
+	Vector<RD::VertexAttribute> vertex_attributes;
+	vertex_attributes.push_back({ 0, 0, RD::DATA_FORMAT_R32G32B32_SFLOAT, 0 }); // position
+	vertex_attributes.push_back({ 1, 0, RD::DATA_FORMAT_R32G32B32_SFLOAT, 12 }); // normal
+	vertex_attributes.push_back({ 2, 0, RD::DATA_FORMAT_R32G32_SFLOAT, 24 }); // uv
+
+	RD::VertexFormatID vertex_format = rd->vertex_format_create(vertex_attributes);
+
+	RID vertex_array_mesh = rd->vertex_array_create(combined_vertices.size(), vertex_format, vertex_vector);
+	RID index_array_mesh = rd->index_array_create(combined_index_buffer, 0, combined_indices.size());
+
+	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+	blases.push_back(rd->blas_create(
+			vertex_array_mesh,
+			index_array_mesh,
+			geometry_bits));
+}
+
+void RendererSceneRenderRD::_collect_active_meshes_recursive(Node *node) {
+	MeshInstance3D *mesh_instance = Object::cast_to<MeshInstance3D>(node);
+
+	// Check if current node is a mesh
+	if (mesh_instance && mesh_instance->is_visible_in_tree()) {
+		Ref<Mesh> mesh = mesh_instance->get_mesh();
+		if (mesh.is_valid()) {
+			_create_blas(mesh);
+		}
+	}
+
+	// Check children
+	for (int i = 0; i < node->get_child_count(); i++) {
+		_collect_active_meshes_recursive(node->get_child(i));
+	}
+}
+
+void RendererSceneRenderRD::_setup_raytracing_acceleration_structures() {
+	SceneTree *scene_tree = SceneTree::get_singleton();
+	if (scene_tree) {
+		Node *current_scene = scene_tree->get_current_scene();
+		_collect_active_meshes_recursive(current_scene);
+	}
+}
+
 float RendererSceneRenderRD::_render_buffers_get_luminance_multiplier() {
 	return 1.0;
 }
@@ -1484,6 +1619,17 @@ void RendererSceneRenderRD::set_debug_draw_mode(RS::ViewportDebugDraw p_debug_dr
 
 void RendererSceneRenderRD::update() {
 	sky.update_dirty_skys();
+	SceneTree *tree = static_cast<SceneTree *>(Engine::get_singleton()->get_main_loop());
+	Node *root = tree->get_root();
+	SceneTree *scene_tree = SceneTree::get_singleton();
+	if (scene_tree) {
+		Node *current_scene = scene_tree->get_current_scene();
+		if (current_scene != last_scene) {
+			last_scene = scene_tree->get_current_scene();
+			blases.clear();
+			_setup_raytracing_acceleration_structures();
+		}
+	}
 }
 
 void RendererSceneRenderRD::set_time(double p_time, double p_step) {
@@ -1709,6 +1855,51 @@ void RendererSceneRenderRD::init() {
 #ifdef METAL_ENABLED
 	mfx_spatial = memnew(RendererRD::MFXSpatialEffect);
 #endif
+
+	/* raytracing */
+
+	RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	RenderingContextDriver *rcd = nullptr;
+
+	Error err;
+
+	if (rd == nullptr) {
+#if defined(RD_ENABLED)
+#if defined(METAL_ENABLED)
+		rcd = memnew(RenderingContextDriverMetal);
+		rd = memnew(RenderingDevice);
+#endif
+#if defined(VULKAN_ENABLED)
+		if (rcd == nullptr) {
+			rcd = memnew(RenderingContextDriverVulkan);
+			rd = memnew(RenderingDevice);
+		}
+#endif
+#endif
+		if (rcd != nullptr && rd != nullptr) {
+			err = rcd->initialize();
+			if (err == OK) {
+				err = rd->initialize(rcd);
+			}
+
+			if (err != OK) {
+				memdelete(rd);
+				memdelete(rcd);
+				rd = nullptr;
+				rcd = nullptr;
+			}
+		}
+	}
+
+	Vector<String> variants;
+	variants.push_back("");
+	raytracing_shader.initialize(variants);
+
+	RID version = raytracing_shader.version_create(true);
+	RID shader = raytracing_shader.version_get_shader(version, 0);
+
+	// TODO: Should not be Local!!
+	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
 }
 
 RendererSceneRenderRD::~RendererSceneRenderRD() {

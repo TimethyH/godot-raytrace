@@ -66,7 +66,6 @@ public:
 
 private:
 	static MeshStorage *singleton;
-	friend class RendererSceneRenderImplementation::RenderForwardClustered;
 
 	RID default_rd_storage_buffer;
 
@@ -369,6 +368,8 @@ public:
 
 	Mesh *get_mesh(RID p_rid) { return mesh_owner.get_or_null(p_rid); }
 	bool owns_mesh(RID p_rid) { return mesh_owner.owns(p_rid); }
+
+	LocalVector<RID> mesh_get_owned_list();
 
 	virtual RID mesh_allocate() override;
 	virtual void mesh_initialize(RID p_mesh) override;
