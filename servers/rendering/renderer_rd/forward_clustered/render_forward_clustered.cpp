@@ -40,7 +40,15 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 
-#include "servers/rendering/rendering_device_commons.h"
+#if defined(VULKAN_ENABLED)
+#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+#endif
+#if defined(METAL_ENABLED)
+#include "drivers/metal/rendering_context_driver_metal.h"
+#endif
+
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -299,6 +307,17 @@ void RenderForwardClustered::update() {
 	RendererSceneRenderRD::update();
 	_update_global_pipeline_data_requirements_from_project();
 	_update_global_pipeline_data_requirements_from_light_storage();
+
+	static int counter = 0;
+	static bool first_run = true;
+	if (first_run) {
+		if (counter >= 10) {
+			_setup_raytracing_acceleration_structures(STATIC, static_blases, static_tlas);
+			_setup_raytracing_acceleration_structures(DYNAMIC, dynamic_blases, dynamic_tlas);
+			first_run = false;
+		}
+		counter++;
+	}
 }
 
 /// RENDERING ///
@@ -1337,6 +1356,271 @@ void RenderForwardClustered::_update_volumetric_fog(Ref<RenderSceneBuffersRD> p_
 
 		RendererRD::Fog::get_singleton()->volumetric_fog_update(settings, p_cam_projection, p_cam_transform, p_prev_cam_inv_transform, p_shadow_atlas, p_directional_light_count, p_use_directional_shadows, p_positional_light_count, p_voxel_gi_count, p_fog_volumes);
 	}
+}
+
+/* Raytracing */
+
+//RID RendererSceneRenderRD::_create_blas(Ref<Mesh> mesh) {
+//	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+//
+//	RID mesh_rid = mesh->get_rid();
+//	uint32_t surface_count = mesh->get_surface_count();
+//
+//	PackedFloat32Array combined_vertices;
+//	PackedInt32Array combined_indices;
+//	uint32_t vertex_offset = 0;
+//
+//	for (uint32_t i = 0; i < surface_count; i++) {
+//		Array surface_arrays = mesh->surface_get_arrays(i);
+//		if (surface_arrays.is_empty()) {
+//			continue;
+//		}
+//
+//		PackedVector3Array vertices = surface_arrays[RS::ARRAY_VERTEX];
+//		PackedVector3Array normals = surface_arrays[RS::ARRAY_NORMAL];
+//		PackedVector2Array uvs = surface_arrays[RS::ARRAY_TEX_UV];
+//		PackedInt32Array indices = surface_arrays[RS::ARRAY_INDEX];
+//
+//		if (vertices.is_empty() || indices.is_empty()) {
+//			continue;
+//		}
+//
+//		uint32_t vertex_count = vertices.size();
+//
+//		// Interleave vertex data: position (vec3), normal (vec3), uv (vec2)
+//		for (uint32_t v = 0; v < vertex_count; v++) {
+//			// Position
+//			combined_vertices.push_back(vertices[v].x);
+//			combined_vertices.push_back(vertices[v].y);
+//			combined_vertices.push_back(vertices[v].z);
+//
+//			// Normal
+//			if (!normals.is_empty() && normals.size() > v) {
+//				combined_vertices.push_back(normals[v].x);
+//				combined_vertices.push_back(normals[v].y);
+//				combined_vertices.push_back(normals[v].z);
+//			} else {
+//				combined_vertices.push_back(0.0f);
+//				combined_vertices.push_back(1.0f);
+//				combined_vertices.push_back(0.0f);
+//			}
+//
+//			// UV
+//			if (!uvs.is_empty() && uvs.size() > v) {
+//				combined_vertices.push_back(uvs[v].x);
+//				combined_vertices.push_back(uvs[v].y);
+//			} else {
+//				combined_vertices.push_back(0.0f);
+//				combined_vertices.push_back(0.0f);
+//			}
+//		}
+//
+//		// Combine index data with vertex offset
+//		for (int j = 0; j < indices.size(); j++) {
+//			combined_indices.push_back(indices[j] + vertex_offset);
+//		}
+//
+//		vertex_offset += vertex_count;
+//	}
+//
+//	if (combined_vertices.is_empty() || combined_indices.is_empty()) {
+//		ERR_PRINT("No valid geometry data found for mesh");
+//		return RID();
+//	}
+//
+//	// Create combined buffers
+//	RID combined_vertex_buffer = rd->vertex_buffer_create(combined_vertices.size() * sizeof(float));
+//	RID combined_index_buffer = rd->index_buffer_create(combined_indices.size() * sizeof(uint32_t), RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
+//
+//	PackedByteArray combined_vertex_bytes = combined_vertices.to_byte_array();
+//	PackedByteArray combined_index_bytes = combined_indices.to_byte_array();
+//
+//	// Upload data
+//	rd->buffer_update(combined_vertex_buffer, 0, combined_vertices.size(), &combined_vertex_bytes);
+//	rd->buffer_update(combined_index_buffer, 0, combined_indices.size(), &combined_index_bytes);
+//
+//	Vector<RID> vertex_vector;
+//	vertex_vector.push_back(combined_vertex_buffer);
+//
+//	// Vertex format: position (vec3), normal (vec3), uv (vec2)
+//	Vector<RD::VertexAttribute> vertex_attributes;
+//	vertex_attributes.push_back({ 0, 0, RD::DATA_FORMAT_R32G32B32_SFLOAT, 0 }); // position
+//	vertex_attributes.push_back({ 1, 0, RD::DATA_FORMAT_R32G32B32_SFLOAT, 12 }); // normal
+//	vertex_attributes.push_back({ 2, 0, RD::DATA_FORMAT_R32G32_SFLOAT, 24 }); // uv
+//
+//	RD::VertexFormatID vertex_format = rd->vertex_format_create(vertex_attributes);
+//
+//	RID vertex_array_mesh = rd->vertex_array_create(combined_vertices.size(), vertex_format, vertex_vector);
+//	RID index_array_mesh = rd->index_array_create(combined_index_buffer, 0, combined_indices.size());
+//
+//	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+//
+//	return rd->blas_create(
+//			vertex_array_mesh,
+//			index_array_mesh,
+//			geometry_bits);
+//}
+
+RID RenderForwardClustered::_create_blas(RID mesh_rid) {
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+
+	// Get the mesh from storage using RID
+	RendererRD::MeshStorage::Mesh *mesh = mesh_storage->mesh_owner.get_or_null(mesh_rid);
+	if (!mesh) {
+		ERR_PRINT("Invalid mesh RID for BLAS creation");
+		return RID();
+	}
+
+	if (mesh->surface_count == 0) {
+		ERR_PRINT("Mesh has no surfaces for BLAS creation");
+		return RID();
+	}
+
+	// For raytracing, we need to combine all surfaces into a single BLAS
+	Vector<RID> vertex_arrays;
+	Vector<RID> index_arrays;
+	Vector<uint32_t> vertex_counts;
+	Vector<uint32_t> index_counts;
+
+	for (uint32_t i = 0; i < mesh->surface_count; i++) {
+		RendererRD::MeshStorage::Mesh::Surface *surface = mesh->surfaces[i];
+		if (!surface || surface->vertex_count == 0 || surface->index_count == 0) {
+			continue;
+		}
+
+		// Skip non-triangle primitives
+		if (surface->primitive != RS::PRIMITIVE_TRIANGLES) {
+			continue;
+		}
+
+		// Get or create appropriate vertex array for raytracing
+		RID vertex_array = _get_raytracing_vertex_array(surface);
+		if (!vertex_array.is_valid()) {
+			continue;
+		}
+
+		vertex_arrays.push_back(vertex_array);
+		index_arrays.push_back(surface->index_array);
+		vertex_counts.push_back(surface->vertex_count);
+		index_counts.push_back(surface->index_count);
+	}
+
+	if (vertex_arrays.is_empty()) {
+		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
+		return RID();
+	}
+
+	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
+	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+	return rd->blas_create(
+			vertex_arrays[0],
+			index_arrays[0],
+			geometry_bits);
+}
+
+RID RenderForwardClustered::_get_raytracing_vertex_array(void *surface) {
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	RendererRD::MeshStorage::Mesh::Surface *mesh_surface = reinterpret_cast<RendererRD::MeshStorage::Mesh::Surface *>(surface);
+
+	// Check if we already have a suitable vertex array
+	// For raytracing, we need position data at minimum
+	uint64_t required_format = RS::ARRAY_FORMAT_VERTEX;
+
+	// Look for existing version with compatible format
+	mesh_surface->version_lock.lock();
+	for (uint32_t v = 0; v < mesh_surface->version_count; v++) {
+		RendererRD::MeshStorage::Mesh::Surface::Version *version = &mesh_surface->versions[v];
+		if ((version->input_mask & required_format) == required_format) {
+			RID result = version->vertex_array;
+			mesh_surface->version_lock.unlock();
+			return result;
+		}
+	}
+	mesh_surface->version_lock.unlock();
+
+	// Need to create a new vertex array suitable for raytracing
+	if (!mesh_surface->vertex_buffer.is_valid()) {
+		ERR_PRINT("mesh_surface has no vertex buffer");
+		return RID();
+	}
+
+	// Create vertex format for raytracing (position only for basic BLAS)
+	Vector<RD::VertexAttribute> vertex_attributes;
+	vertex_attributes.push_back({
+			0, // location
+			0, // binding
+			RD::DATA_FORMAT_R32G32B32_SFLOAT, // format (vec3)
+			0 // offset
+	});
+
+	RD::VertexFormatID vertex_format = rd->vertex_format_create(vertex_attributes);
+
+	Vector<RID> vertex_buffers;
+	vertex_buffers.push_back(mesh_surface->vertex_buffer);
+
+	return rd->vertex_array_create(
+			mesh_surface->vertex_count,
+			vertex_format,
+			vertex_buffers);
+}
+
+// This should probably be in the driver or MeshStorage
+void RenderForwardClustered::_setup_raytracing_acceleration_structures(AccelerationStructureGeometryType p_type, LocalVector<RID> &p_blases, RID &p_tlas) {
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	RendererSceneCull *rsc = RendererSceneCull::singleton;
+	LocalVector<RID> instance_rids = rsc->instance_owner.get_owned_list();
+	LocalVector<Transform3D> transforms;
+	AHashMap<RID, RID> mesh_blas_map;
+
+	for (uint64_t i = 0; i < instance_rids.size(); ++i) {
+		RendererSceneCull::Instance *instance = rsc->instance_owner.get_or_null(instance_rids[i]);
+
+		if (!instance || instance->base_type != RenderingServer::InstanceType::INSTANCE_MESH) {
+			continue;
+		}
+
+		// dynamic geometry, skipped in the static TLAS
+		if (instance->dynamic_gi || instance->redraw_if_visible) {
+			if (p_type == STATIC) {
+				continue;
+			}
+		} else {
+			if (p_type == DYNAMIC) {
+				continue;
+			}
+		}
+
+		RID mesh_rid = instance->base;
+		if (mesh_blas_map.has(mesh_rid)) {
+			p_blases.push_back(mesh_blas_map[mesh_rid]);
+		} else {
+			RID blas = _create_blas(mesh_rid);
+			if (blas.is_null()) {
+				continue;
+			}
+			p_blases.push_back(blas);
+			mesh_blas_map[mesh_rid] = blas;
+		}
+
+		transforms.push_back(instance->transform);
+	}
+
+	// CHECK: Flags might be incorrect.
+	BitField<RenderingDevice::BufferCreationBits> creation_bits;
+	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+	RID instances_buffer = rd->tlas_instances_buffer_create(transforms.size(), creation_bits);
+
+	rd->tlas_instances_buffer_fill(instances_buffer, p_blases, transforms);
+	p_tlas = rd->tlas_create(instances_buffer);
+
+	for (uint64_t i = 0; i < p_blases.size(); ++i) {
+		rd->acceleration_structure_build(p_blases[i]);
+	}
+
+	rd->acceleration_structure_build(p_tlas);
 }
 
 /* Lighting */
@@ -5080,6 +5364,51 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
+
+	/* raytracing */
+
+	RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	RenderingContextDriver *rcd = nullptr;
+
+	Error err;
+
+	if (rd == nullptr) {
+#if defined(RD_ENABLED)
+#if defined(METAL_ENABLED)
+		rcd = memnew(RenderingContextDriverMetal);
+		rd = memnew(RenderingDevice);
+#endif
+#if defined(VULKAN_ENABLED)
+		if (rcd == nullptr) {
+			rcd = memnew(RenderingContextDriverVulkan);
+			rd = memnew(RenderingDevice);
+		}
+#endif
+#endif
+		if (rcd != nullptr && rd != nullptr) {
+			err = rcd->initialize();
+			if (err == OK) {
+				err = rd->initialize(rcd);
+			}
+
+			if (err != OK) {
+				memdelete(rd);
+				memdelete(rcd);
+				rd = nullptr;
+				rcd = nullptr;
+			}
+		}
+	}
+
+	Vector<String> variants;
+	variants.push_back("");
+	raytracing_shader.initialize(variants);
+
+	RID version = raytracing_shader.version_create(true);
+	RID shader = raytracing_shader.version_get_shader(version, 0);
+
+	// TODO: Should not be Local!!
+	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
