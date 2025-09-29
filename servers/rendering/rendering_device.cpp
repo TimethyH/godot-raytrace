@@ -3505,9 +3505,17 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 				break;
 			case SHADER_STAGE_RAYGEN:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
 			case SHADER_STAGE_ANY_HIT:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
 			case SHADER_STAGE_CLOSEST_HIT:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
 			case SHADER_STAGE_MISS:
+				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
+				break;
 			case SHADER_STAGE_INTERSECTION:
 				shader->stage_bits.set_flag(RDD::PIPELINE_STAGE_RAY_TRACING_SHADER_BIT);
 				break;

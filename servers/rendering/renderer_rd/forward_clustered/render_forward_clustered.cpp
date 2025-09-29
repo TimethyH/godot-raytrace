@@ -2194,6 +2194,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 #else
+	// TODO should move to the constructor 
 
 	RendererRD::RaytraceRD test;
 	test.init();
