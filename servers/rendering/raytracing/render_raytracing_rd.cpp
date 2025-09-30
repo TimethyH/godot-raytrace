@@ -17,6 +17,7 @@
 namespace RendererRD {
 void RaytraceRD::init() {
 
+	/*
 	RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
 	RenderingContextDriver *rcd = nullptr;
 
@@ -49,6 +50,7 @@ void RaytraceRD::init() {
 			}
 		}
 	}
+	*/
 
 	Vector<String> variants;
 	variants.push_back(" ");
@@ -65,10 +67,8 @@ void RaytraceRD::init() {
 
 	Vector<RD::ShaderStageSPIRVData> shader_stage = raytracing_shader.shader.compile_stages(stage_names);*/
 
-	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
-
 	// Set uniform bindings
-	ray_scene_state.uniform_buffer = rd->uniform_buffer_create(sizeof(RaySceneState::UBO));
+	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
 
 	Vector<RD::Uniform> uniforms;
 	{
@@ -79,7 +79,15 @@ void RaytraceRD::init() {
 		uniforms.push_back(u);
 	}
 
-	ray_scene_state.uniform_set = rd->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
+	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
+
+	RID raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(shader);
+}
+
+RaytraceRD::~RaytraceRD() {
+	/*raytracing_shader.shader.version_free(raytracing_shader.default_shader);
+	raytracing_shader.shader.version_free(raytracing_shader.default_shader_rd);
+	raytracing_shader.shader.version_free(raytracing_shader.default_material);*/
 }
 
 void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data) {

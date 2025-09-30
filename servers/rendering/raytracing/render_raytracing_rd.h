@@ -21,8 +21,7 @@ class RaytraceRD {
 public:
 	//RaytraceRD();
 	void init();
-
-	//~RaytraceRD();
+	~RaytraceRD();
 
 	void trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data);
 
