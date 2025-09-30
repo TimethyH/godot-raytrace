@@ -4965,6 +4965,8 @@ RenderForwardClustered::RenderForwardClustered() {
 #endif
 
 		scene_shader.init(defines);
+
+
 	}
 
 	/* shadow sampler */
