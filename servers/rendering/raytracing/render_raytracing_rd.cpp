@@ -81,13 +81,13 @@ void RaytraceRD::init(RID render_target, RID tlas) {
 		uniforms.push_back(u);
 	}
 
-	/*{
+	{
 		RD::Uniform u;
 		u.binding = 1;
 		u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
 		u.append_id(tlas);
 		uniforms.push_back(u);
-	}*/
+	}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
 }
