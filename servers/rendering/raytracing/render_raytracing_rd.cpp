@@ -77,17 +77,17 @@ void RaytraceRD::init(RID render_target, RID tlas) {
 		RD::Uniform u;
 		u.binding = 0;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		u.append_id(RID());
+		u.append_id(RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture(render_target));
 		uniforms.push_back(u);
 	}
 
-	{
+	/*{
 		RD::Uniform u;
 		u.binding = 1;
 		u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
 		u.append_id(tlas);
 		uniforms.push_back(u);
-	}
+	}*/
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
 }

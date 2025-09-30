@@ -2197,7 +2197,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// TODO should move to the constructor 
 
 	RendererRD::RaytraceRD test;
-	test.init();
+	test.init(rb->get_render_target(), RID());
 
 #endif
 	{

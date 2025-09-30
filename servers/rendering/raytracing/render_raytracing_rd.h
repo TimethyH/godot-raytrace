@@ -22,7 +22,7 @@ public:
 	//RaytraceRD();
 	void init(RID render_target, RID tlas);
 
-	//~RaytraceRD();
+	~RaytraceRD();
 
 	void trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data);
 
