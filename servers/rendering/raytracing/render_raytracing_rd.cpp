@@ -15,9 +15,9 @@
 #include <memory>
 
 namespace RendererRD {
-void RaytraceRD::init() {
+void RaytraceRD::init(RID render_target, RID tlas) {
 
-	RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	/*RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
 	RenderingContextDriver *rcd = nullptr;
 
 	Error err;
@@ -48,7 +48,7 @@ void RaytraceRD::init() {
 				rcd = nullptr;
 			}
 		}
-	}
+	}*/
 
 	Vector<String> variants;
 	variants.push_back(" ");
@@ -65,21 +65,31 @@ void RaytraceRD::init() {
 
 	Vector<RD::ShaderStageSPIRVData> shader_stage = raytracing_shader.shader.compile_stages(stage_names);*/
 
-	RID raytrace_pipeline = rd->raytracing_pipeline_create(shader);
+	RID raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(shader);
 
 	// Set uniform bindings
-	ray_scene_state.uniform_buffer = rd->uniform_buffer_create(sizeof(RaySceneState::UBO));
+	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
+
+
 
 	Vector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
 		u.binding = 0;
-		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u.append_id(ray_scene_state.uniform_buffer);
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.append_id(RID());
 		uniforms.push_back(u);
 	}
 
-	ray_scene_state.uniform_set = rd->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
+	{
+		RD::Uniform u;
+		u.binding = 1;
+		u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
+		u.append_id(tlas);
+		uniforms.push_back(u);
+	}
+
+	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0); // TODO remove magic number set 0
 }
 
 void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data) {

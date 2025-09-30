@@ -5776,9 +5776,9 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 	}
 
 	// Groups.
-	pipeline_create_info.groupCount = pipeline_create_info.stageCount;
+	pipeline_create_info.groupCount = shader_info->vk_groups_create_info.size();
 	VkRayTracingShaderGroupCreateInfoKHR *vk_pipeline_groups = ALLOCA_ARRAY(VkRayTracingShaderGroupCreateInfoKHR, pipeline_create_info.groupCount);
-	for (uint32_t i = 0; i < pipeline_create_info.stageCount; i++) {
+	for (uint32_t i = 0; i < pipeline_create_info.groupCount; i++) {
 		vk_pipeline_groups[i] = shader_info->vk_groups_create_info[i];
 	}
 

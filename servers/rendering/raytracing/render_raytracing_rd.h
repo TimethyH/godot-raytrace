@@ -20,7 +20,7 @@ class RenderSceneBuffersRD;
 class RaytraceRD {
 public:
 	//RaytraceRD();
-	void init();
+	void init(RID render_target, RID tlas);
 
 	//~RaytraceRD();
 
