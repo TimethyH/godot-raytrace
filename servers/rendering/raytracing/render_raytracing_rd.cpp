@@ -56,8 +56,8 @@ void RaytraceRD::init() {
 	variants.push_back(" ");
 	raytracing_shader.shader.initialize(variants);
 
-	RID version = raytracing_shader.shader.version_create(true);
-	RID shader = raytracing_shader.shader.version_get_shader(version, 0);
+	raytracing_shader.version = raytracing_shader.shader.version_create(true);
+	RID shader = raytracing_shader.shader.version_get_shader(raytracing_shader.version, 0);
 
 	// Specify the shader stages to get the compiled spriv source code
 	/*Vector<String> stage_names;
@@ -85,13 +85,10 @@ void RaytraceRD::init() {
 }
 
 RaytraceRD::~RaytraceRD() {
-	/*raytracing_shader.shader.version_free(raytracing_shader.default_shader);
-	raytracing_shader.shader.version_free(raytracing_shader.default_shader_rd);
-	raytracing_shader.shader.version_free(raytracing_shader.default_material);*/
+	raytracing_shader.shader.version_free(raytracing_shader.version);
 }
 
-void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data) {
-
+void RaytraceRD::trace_rays(RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data) {
 	//RayPushConstant ray_push_constant;
 
 	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
@@ -118,5 +115,6 @@ void RaytraceRD::trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p
 	//rd->raytracing_list_end();
 
 	//rd->draw_command_end_label();
+
 }
 } //namespace RendererRD

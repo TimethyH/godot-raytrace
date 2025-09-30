@@ -58,6 +58,8 @@ private:
 		RID default_shader;
 		RID default_material;
 		RID default_shader_rd;
+		RID version;
 	} raytracing_shader;
+
 };
 } //namespace RendererRD
