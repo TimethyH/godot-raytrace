@@ -801,21 +801,8 @@ public:
 		RID render_target;
 	};
 
-	enum AccelerationStructureGeometryType {
-		STATIC,
-		DYNAMIC
-	};
-
-	LocalVector<RID> static_blases;
-	RID static_tlas;
-	LocalVector<RID> dynamic_blases;
-	RID dynamic_tlas;
-
 private:
 	void _trace_rays(RenderSceneDataRD &scene_data);
-	RID _create_blas(RID mesh_rid);
-	RID _get_raytracing_vertex_array(void *surface);
-	void _setup_raytracing_acceleration_structures(AccelerationStructureGeometryType p_type, LocalVector<RID> &p_blases, RID &p_tlas);
 
 	// 128 is the max size of a push constant.
 	struct rayPushConstant {

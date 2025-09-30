@@ -41,6 +41,8 @@
 #include "servers/rendering/rendering_device_driver.h"
 #include "servers/rendering/rendering_device_graph.h"
 
+#include "core/templates/a_hash_map.h"
+
 class RDTextureFormat;
 class RDTextureView;
 class RDAttachmentFormat;
@@ -94,6 +96,7 @@ protected:
 	static void _bind_compatibility_methods();
 #endif
 
+private:
 	/***************************/
 	/**** ID INFRASTRUCTURE ****/
 	/***************************/
@@ -1251,17 +1254,31 @@ private:
 
 	RID_Owner<InstancesBuffer, true> instances_buffer_owner;
 	RID_Owner<AccelerationStructure> acceleration_structure_owner;
+	AHashMap<RID, LocalVector<RID>> mesh_blases_map;
 
 public:
+	enum AccelerationStructureGeometryType {
+		STATIC,
+		DYNAMIC
+	};
+
+	LocalVector<RID> static_blases;
+	RID static_tlas;
+	LocalVector<RID> dynamic_blases;
+	RID dynamic_tlas;
+
 	enum GeometryBits {
 		GEOMETRY_OPAQUE = (1 << 0),
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
-	RID tlas_create(RID p_instances_buffer);
+	void setup_raytracing_acceleration_structures(void *p_scenario, AccelerationStructureGeometryType p_type);
+
+	LocalVector<RID> mesh_instance_blases_create(RID p_mesh_rid, RID p_mesh_instance_rid);
+	RID _blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
 	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
 	void tlas_instances_buffer_fill(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
+	RID tlas_create(RID p_instances_buffer);
 	Error acceleration_structure_build(RID p_acceleration_structure);
 
 	/*************************/
@@ -1508,7 +1525,7 @@ public:
 	RaytracingListID raytracing_list_begin();
 	void raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline);
 	void raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index);
-	void raytracing_list_set_push_constant(RaytracingListID p_list, const void* p_data, uint32_t p_data_size);
+	void raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size);
 	void raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_width, uint32_t p_height);
 	void raytracing_list_end();
 

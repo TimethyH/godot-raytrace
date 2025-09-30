@@ -75,7 +75,7 @@ private:
 
 	struct MeshInstance;
 
-	friend class RendererSceneRenderImplementation::RenderForwardClustered;
+	friend class RenderingDevice;
 	struct Mesh {
 		struct Surface {
 			RS::PrimitiveType primitive = RS::PRIMITIVE_POINTS;
