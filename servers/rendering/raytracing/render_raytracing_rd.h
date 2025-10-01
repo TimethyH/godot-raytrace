@@ -62,5 +62,7 @@ private:
 		RID version;
 	} raytracing_shader;
 
+
+	RID raytrace_pipeline;
 };
 } //namespace RendererRD

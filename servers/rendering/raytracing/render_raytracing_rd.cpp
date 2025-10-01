@@ -101,28 +101,28 @@ void RaytraceRD::trace_rays(RenderSceneDataRD & scene_data, const RenderDataRD *
 
 	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
 
-	//RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	//rd->draw_command_begin_label("Trace rays");
+	rd->draw_command_begin_label("Trace rays");
 
-	//RD::RaytracingListID LID = rd->raytracing_list_begin();
+	RD::RaytracingListID LID = rd->raytracing_list_begin();
 
-	//rd->acceleration_structure_build(); // blas
-	//rd->acceleration_structure_build(); // tlas
+	rd->acceleration_structure_build(); // blas
+	rd->acceleration_structure_build(); // tlas
 
-	//rd->raytracing_list_bind_raytracing_pipeline(LID); // bind list
+	rd->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
 
-	//// Bind resources
-	//rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
+	// Bind resources
+	rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
 	//rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
 
-	//rd->raytracing_list_trace_rays(LID, 800, 800); // width height
+	rd->raytracing_list_trace_rays(LID, 800, 800); // width height
 
-	//// Pipeline barier function here
+	// Pipeline barier function here
 
-	//rd->raytracing_list_end();
+	rd->raytracing_list_end();
 
-	//rd->draw_command_end_label();
+	rd->draw_command_end_label();
 
 }
 } //namespace RendererRD
