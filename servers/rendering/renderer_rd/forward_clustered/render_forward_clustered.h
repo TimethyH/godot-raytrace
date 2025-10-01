@@ -801,6 +801,9 @@ public:
 		RID render_target;
 	};
 
+	LocalVector<RID> surface_create_blases(RID p_mesh_instance_rid, void *p_surface);
+	void build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type);
+
 private:
 	void _trace_rays(RenderSceneDataRD &scene_data);
 

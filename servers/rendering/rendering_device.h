@@ -1272,10 +1272,11 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	void setup_raytracing_acceleration_structures(void *p_scenario, AccelerationStructureGeometryType p_type);
-
-	LocalVector<RID> mesh_instance_blases_create(RID p_mesh_rid, RID p_mesh_instance_rid);
-	RID _blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
+	bool has_blas(RID p_mesh_rid);
+	LocalVector<RID> &get_type_blases(AccelerationStructureGeometryType p_type);
+	RID &get_type_tlas(AccelerationStructureGeometryType p_type);
+	LocalVector<RID> blases_get_or_null(RID p_mesh_rid);
+	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
 	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
 	void tlas_instances_buffer_fill(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
 	RID tlas_create(RID p_instances_buffer);
