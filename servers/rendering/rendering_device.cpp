@@ -42,6 +42,9 @@
 #include "modules/glslang/shader_compile.h"
 #endif
 
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
+
 #define FORCE_SEPARATE_PRESENT_QUEUE 0
 #define PRINT_FRAMEBUFFER_FORMAT 0
 
@@ -138,6 +141,323 @@ RenderingDevice *RenderingDevice::singleton = nullptr;
 
 RenderingDevice *RenderingDevice::get_singleton() {
 	return singleton;
+}
+
+/* Raytracing */
+
+//RID RendererSceneRenderRD::mesh_instance_blases_create(Ref<Mesh> mesh) {
+//	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+//
+//	RID mesh_rid = mesh->get_rid();
+//	uint32_t surface_count = mesh->get_surface_count();
+//
+//	PackedFloat32Array combined_vertices;
+//	PackedInt32Array combined_indices;
+//	uint32_t vertex_offset = 0;
+//
+//	for (uint32_t i = 0; i < surface_count; i++) {
+//		Array surface_arrays = mesh->surface_get_arrays(i);
+//		if (surface_arrays.is_empty()) {
+//			continue;
+//		}
+//
+//		PackedVector3Array vertices = surface_arrays[RS::ARRAY_VERTEX];
+//		PackedVector3Array normals = surface_arrays[RS::ARRAY_NORMAL];
+//		PackedVector2Array uvs = surface_arrays[RS::ARRAY_TEX_UV];
+//		PackedInt32Array indices = surface_arrays[RS::ARRAY_INDEX];
+//
+//		if (vertices.is_empty() || indices.is_empty()) {
+//			continue;
+//		}
+//
+//		uint32_t vertex_count = vertices.size();
+//
+//		// Interleave vertex data: position (vec3), normal (vec3), uv (vec2)
+//		for (uint32_t v = 0; v < vertex_count; v++) {
+//			// Position
+//			combined_vertices.push_back(vertices[v].x);
+//			combined_vertices.push_back(vertices[v].y);
+//			combined_vertices.push_back(vertices[v].z);
+//
+//			// Normal
+//			if (!normals.is_empty() && normals.size() > v) {
+//				combined_vertices.push_back(normals[v].x);
+//				combined_vertices.push_back(normals[v].y);
+//				combined_vertices.push_back(normals[v].z);
+//			} else {
+//				combined_vertices.push_back(0.0f);
+//				combined_vertices.push_back(1.0f);
+//				combined_vertices.push_back(0.0f);
+//			}
+//
+//			// UV
+//			if (!uvs.is_empty() && uvs.size() > v) {
+//				combined_vertices.push_back(uvs[v].x);
+//				combined_vertices.push_back(uvs[v].y);
+//			} else {
+//				combined_vertices.push_back(0.0f);
+//				combined_vertices.push_back(0.0f);
+//			}
+//		}
+//
+//		// Combine index data with vertex offset
+//		for (int j = 0; j < indices.size(); j++) {
+//			combined_indices.push_back(indices[j] + vertex_offset);
+//		}
+//
+//		vertex_offset += vertex_count;
+//	}
+//
+//	if (combined_vertices.is_empty() || combined_indices.is_empty()) {
+//		ERR_PRINT("No valid geometry data found for mesh");
+//		return RID();
+//	}
+//
+//	// Create combined buffers
+//	RID combined_vertex_buffer = rd->vertex_buffer_create(combined_vertices.size() * sizeof(float));
+//	RID combined_index_buffer = rd->index_buffer_create(combined_indices.size() * sizeof(uint32_t), RenderingDeviceCommons::IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32);
+//
+//	PackedByteArray combined_vertex_bytes = combined_vertices.to_byte_array();
+//	PackedByteArray combined_index_bytes = combined_indices.to_byte_array();
+//
+//	// Upload data
+//	rd->buffer_update(combined_vertex_buffer, 0, combined_vertices.size(), &combined_vertex_bytes);
+//	rd->buffer_update(combined_index_buffer, 0, combined_indices.size(), &combined_index_bytes);
+//
+//	Vector<RID> vertex_vector;
+//	vertex_vector.push_back(combined_vertex_buffer);
+//
+//	// Vertex format: position (vec3), normal (vec3), uv (vec2)
+//	Vector<RD::VertexAttribute> vertex_attributes;
+//	vertex_attributes.push_back({ 0, 0, RD::DATA_FORMAT_R32G32B32_SFLOAT, 0 }); // position
+//	vertex_attributes.push_back({ 1, 0, RD::DATA_FORMAT_R32G32B32_SFLOAT, 12 }); // normal
+//	vertex_attributes.push_back({ 2, 0, RD::DATA_FORMAT_R32G32_SFLOAT, 24 }); // uv
+//
+//	RD::VertexFormatID vertex_format = rd->vertex_format_create(vertex_attributes);
+//
+//	RID vertex_array_mesh = rd->vertex_array_create(combined_vertices.size(), vertex_format, vertex_vector);
+//	RID index_array_mesh = rd->index_array_create(combined_index_buffer, 0, combined_indices.size());
+//
+//	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+//
+//	return rd->_blas_create(
+//			vertex_array_mesh,
+//			index_array_mesh,
+//			geometry_bits);
+//}
+
+LocalVector<RID> RenderingDevice::mesh_instance_blases_create(RID p_mesh_rid, RID p_mesh_instance_rid) {
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+
+	RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->mesh_instance_owner.get_or_null(p_mesh_instance_rid);
+	RendererRD::MeshStorage::Mesh *mesh = mesh_instance->mesh;
+
+	LocalVector<RID> blases;
+
+	// Might not be necessary since mesh_instance is already checked
+	if (!mesh) {
+		ERR_PRINT("Invalid mesh RID for BLAS creation");
+		return blases;
+	}
+
+	if (mesh->surface_count == 0) {
+		ERR_PRINT("Mesh has no surfaces for BLAS creation");
+		return blases;
+	}
+
+	// For raytracing, we need to combine all surfaces into a single BLAS
+	Vector<RID> vertex_arrays;
+	Vector<RID> index_arrays;
+
+	for (uint32_t i = 0; i < mesh->surface_count; i++) {
+		// Not sure if Surface LOD corresponds to i
+		RendererRD::MeshStorage::Mesh::Surface *surface = (RendererRD::MeshStorage::Mesh::Surface *)mesh_storage->mesh_get_surface(p_mesh_rid, i);
+		//RendererRD::MeshStorage::Mesh::Surface *surface = mesh->surfaces[i];
+		RID index_array = surface->index_array;
+		RID vertex_array;
+		VertexFormatID vertex_format;
+
+		// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
+		uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
+				(1 << RS::ARRAY_NORMAL) |
+				(1 << RS::ARRAY_INDEX);
+
+		mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(p_mesh_instance_rid, i, input_mask, false, vertex_array, vertex_format);
+
+		if (!surface || surface->vertex_count == 0 || surface->index_count == 0) {
+			continue;
+		}
+
+		// Skip non-triangle primitives
+		if (surface->primitive != RS::PRIMITIVE_TRIANGLES) {
+			continue;
+		}
+
+		//// Get or create appropriate vertex array for raytracing
+		//RID vertex_array = get_raytracing_vertex_array(surface);
+		//if (!vertex_array.is_valid()) {
+		//	continue;
+		//}
+
+		vertex_arrays.push_back(vertex_array);
+		index_arrays.push_back(surface->index_array);
+	}
+
+	if (vertex_arrays.is_empty()) {
+		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
+		return blases;
+	}
+
+	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
+	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+	for (int64_t i = 0; i < vertex_arrays.size(); ++i) {
+		blases.push_back(_blas_create(
+				vertex_arrays[i],
+				index_arrays[i],
+				geometry_bits));
+	}
+
+	return blases;
+}
+
+//RID RenderingDevice::get_raytracing_vertex_array(void *surface) {
+//	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+//	RendererRD::MeshStorage::Mesh::Surface *mesh_surface = reinterpret_cast<RendererRD::MeshStorage::Mesh::Surface *>(surface);
+//	//mesh_storage->mesh_instance
+//	//mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format
+//	//
+//	// Check if we already have a suitable vertex array
+//	// For raytracing, we need position data at minimum
+//	uint64_t required_format = RS::ARRAY_FORMAT_VERTEX;
+//
+//	// Look for existing version with compatible format
+//	mesh_surface->version_lock.lock();
+//	for (uint32_t v = 0; v < mesh_surface->version_count; v++) {
+//		RendererRD::MeshStorage::Mesh::Surface::Version *version = &mesh_surface->versions[v];
+//		if ((version->input_mask & required_format) == required_format) {
+//			RID result = version->vertex_array;
+//			mesh_surface->version_lock.unlock();
+//			return result;
+//		}
+//	}
+//	mesh_surface->version_lock.unlock();
+//
+//	// Need to create a new vertex array suitable for raytracing
+//	if (!mesh_surface->vertex_buffer.is_valid()) {
+//		ERR_PRINT("mesh_surface has no vertex buffer");
+//		return RID();
+//	}
+//
+//	// Create vertex format for raytracing (position only for basic BLAS)
+//	Vector<RD::VertexAttribute> vertex_attributes;
+//	vertex_attributes.push_back({
+//			0, // location
+//			0, // binding
+//			RD::DATA_FORMAT_R32G32B32_SFLOAT, // format (vec3)
+//			0 // offset
+//	});
+//
+//	RD::VertexFormatID vertex_format = vertex_format_create(vertex_attributes);
+//
+//	Vector<RID> vertex_buffers;
+//	vertex_buffers.push_back(mesh_surface->vertex_buffer);
+//
+//	return vertex_array_create(
+//			mesh_surface->vertex_count,
+//			vertex_format,
+//			vertex_buffers);
+//}
+
+// This should probably be in the driver or MeshStorage
+void RenderingDevice::setup_raytracing_acceleration_structures(void *p_scenario, AccelerationStructureGeometryType p_type) {
+	RendererSceneCull::Scenario *scenario = reinterpret_cast<RendererSceneCull::Scenario *>(p_scenario);
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	LocalVector<Transform3D> transforms;
+	SelfList<RendererSceneCull::Instance>::List &instances_list = scenario->instances;
+	SelfList<RendererSceneCull::Instance> *instance_list = instances_list.first();
+
+	LocalVector<RID> blases;
+	RID tlas;
+
+	while (instance_list != nullptr) {
+		RendererSceneCull::Instance *instance = instance_list->self();
+
+		if (!instance || instance->base_type != RenderingServer::InstanceType::INSTANCE_MESH) {
+			instance_list = instance_list->next();
+			continue;
+		}
+
+		// dynamic geometry, skipped in the static TLAS
+		if (instance->dynamic_gi || instance->redraw_if_visible) {
+			if (p_type == STATIC) {
+				instance_list = instance_list->next();
+				continue;
+			}
+		} else {
+			if (p_type == DYNAMIC) {
+				instance_list = instance_list->next();
+				continue;
+			}
+		}
+
+		RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->mesh_instance_owner.get_or_null(instance->mesh_instance);
+
+		// Might be unnecessary because of base_type == INSTANCE_MESH
+		if (mesh_instance) {
+			instance_list = instance_list->next();
+			continue;
+		}
+
+		RID mesh_rid = instance->base;
+		if (mesh_blases_map.has(mesh_rid)) {
+			LocalVector<RID> &reuse_blases = mesh_blases_map[mesh_rid];
+
+			for (uint64_t j = 0; j < reuse_blases.size(); ++j) {
+				blases.push_back(reuse_blases[j]);
+				transforms.push_back(instance->transform);
+			}
+		} else {
+			LocalVector<RID> mesh_instances_blases = mesh_instance_blases_create(mesh_rid, instance->mesh_instance);
+			if (mesh_instances_blases.is_empty()) {
+				instance_list = instance_list->next();
+				continue;
+			}
+
+			mesh_blases_map[mesh_rid] = mesh_instances_blases;
+			for (uint64_t j = 0; j < mesh_instances_blases.size(); ++j) {
+				blases.push_back(mesh_instances_blases[j]);
+				transforms.push_back(instance->transform);
+			}
+		}
+	}
+
+	// CHECK: Flags might be incorrect.
+	BitField<RenderingDevice::BufferCreationBits> creation_bits;
+	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+	RID instances_buffer = tlas_instances_buffer_create(transforms.size(), creation_bits);
+
+	if (blases.size()) {
+		tlas_instances_buffer_fill(instances_buffer, blases, transforms);
+		tlas = tlas_create(instances_buffer);
+
+		for (uint64_t i = 0; i < blases.size(); ++i) {
+			acceleration_structure_build(blases[i]);
+		}
+
+		acceleration_structure_build(tlas);
+	}
+
+	if (p_type == STATIC) {
+		static_blases = blases;
+		static_tlas = tlas;
+	} else { // dynamic
+		dynamic_blases = blases;
+		dynamic_tlas = tlas;
+	}
+
+	instance_list = instance_list->next();
 }
 
 /***************************/
@@ -4480,7 +4800,7 @@ Error RenderingDevice::screen_free(DisplayServer::WindowID p_screen) {
 /**** ACCELERATION STRUCTURE ****/
 /********************************/
 
-RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geometry_bits) {
+RID RenderingDevice::_blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geometry_bits) {
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "The current rendering device has no raytracing support.");
 
 	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
@@ -4515,7 +4835,7 @@ RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, BitField
 		geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
 	}
 
-	acceleration_structure.driver_id = driver->blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits);
+	acceleration_structure.driver_id = driver->_blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits);
 	ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to create BLAS.");
 	acceleration_structure.vertex_array = p_vertex_array;
 	acceleration_structure.index_array = p_index_array;
@@ -4589,7 +4909,7 @@ void RenderingDevice::tlas_instances_buffer_fill(RID p_instances_buffer, const V
 	ERR_FAIL_NULL_MSG(instances_buffer, "Instances buffer input is not valid.");
 
 	uint32_t blases_count = p_blases.size();
-	ERR_FAIL_COND_MSG(blases_count != instances_buffer->instance_count, "The number of blases is not equal to the instance count of the instances buffer.");
+	ERR_FAIL_COND_MSG(blases_count != instances_buffer->instance_count, "The number of p_blases is not equal to the instance count of the instances buffer.");
 	ERR_FAIL_COND_MSG(blases_count != p_transforms.size(), "Blases and transforms vectors must have the same size.");
 
 	thread_local LocalVector<RDD::AccelerationStructureID> blases;
@@ -6711,7 +7031,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 		RDG::resource_tracker_free(instances_buffer->buffer.draw_tracker);
 		frames[frame].buffers_to_dispose_of.push_back(instances_buffer->buffer);
 		instances_buffer_owner.free(p_id);
-	}else if (uniform_set_owner.owns(p_id)) {
+	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
 		frames[frame].uniform_sets_to_dispose_of.push_back(*uniform_set);
 		uniform_set_owner.free(p_id);
@@ -7793,6 +8113,7 @@ void RenderingDevice::finalize() {
 	_free_rids(vertex_buffer_owner, "VertexBuffer");
 	_free_rids(framebuffer_owner, "Framebuffer");
 	_free_rids(sampler_owner, "Sampler");
+	_free_rids(acceleration_structure_owner, "AccelerationStructure");
 	{
 		// For textures it's a bit more difficult because they may be shared.
 		LocalVector<RID> owned = texture_owner.get_owned_list();
@@ -8068,9 +8389,9 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("raytracing_pipeline_create", "shader", "specialization_constants"), &RenderingDevice::_raytracing_pipeline_create, DEFVAL(TypedArray<RDPipelineSpecializationConstant>()));
 	ClassDB::bind_method(D_METHOD("raytracing_pipeline_is_valid", "raytracing_pipeline"), &RenderingDevice::raytracing_pipeline_is_valid);
 
-	ClassDB::bind_method(D_METHOD("blas_create", "vertex_array", "index_array", "geometry_bits"), &RenderingDevice::blas_create, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("_blas_create", "vertex_array", "index_array", "geometry_bits"), &RenderingDevice::_blas_create, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("tlas_instances_buffer_create", "instance_count", "creation_bits"), &RenderingDevice::tlas_instances_buffer_create, DEFVAL(0));
-	ClassDB::bind_method(D_METHOD("tlas_instances_buffer_fill", "instances_buffer", "blases", "transforms"), &RenderingDevice::_tlas_instances_buffer_fill);
+	ClassDB::bind_method(D_METHOD("tlas_instances_buffer_fill", "instances_buffer", "p_blases", "transforms"), &RenderingDevice::_tlas_instances_buffer_fill);
 	ClassDB::bind_method(D_METHOD("tlas_create", "instances_buffer"), &RenderingDevice::tlas_create);
 	ClassDB::bind_method(D_METHOD("acceleration_structure_build", "acceleration_structure"), &RenderingDevice::acceleration_structure_build);
 
@@ -8617,7 +8938,8 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(SHADER_STAGE_TESSELATION_CONTROL);
 	BIND_ENUM_CONSTANT(SHADER_STAGE_TESSELATION_EVALUATION);
 	BIND_ENUM_CONSTANT(SHADER_STAGE_COMPUTE);
-	BIND_ENUM_CONSTANT(SHADER_STAGE_RAYGEN);;
+	BIND_ENUM_CONSTANT(SHADER_STAGE_RAYGEN);
+	;
 	BIND_ENUM_CONSTANT(SHADER_STAGE_ANY_HIT);
 	BIND_ENUM_CONSTANT(SHADER_STAGE_CLOSEST_HIT);
 	BIND_ENUM_CONSTANT(SHADER_STAGE_MISS);
@@ -8975,8 +9297,6 @@ static Vector<RenderingDevice::PipelineSpecializationConstant> _get_spec_constan
 	return ret;
 }
 
-
-
 RID RenderingDevice::_render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const Ref<RDPipelineRasterizationState> &p_rasterization_state, const Ref<RDPipelineMultisampleState> &p_multisample_state, const Ref<RDPipelineDepthStencilState> &p_depth_stencil_state, const Ref<RDPipelineColorBlendState> &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants) {
 	PipelineRasterizationState rasterization_state;
 	if (p_rasterization_state.is_valid()) {
@@ -9028,7 +9348,6 @@ void RenderingDevice::_tlas_instances_buffer_fill(RID p_instances_buffer, const 
 	}
 	tlas_instances_buffer_fill(p_instances_buffer, blases, transforms);
 }
-
 
 #ifndef DISABLE_DEPRECATED
 Vector<int64_t> RenderingDevice::_draw_list_begin_split(RID p_framebuffer, uint32_t p_splits, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, const TypedArray<RID> &p_storage_textures) {

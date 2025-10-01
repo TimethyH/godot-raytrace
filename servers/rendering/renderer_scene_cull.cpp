@@ -3109,6 +3109,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
 
+	RD::get_singleton()->setup_raytracing_acceleration_structures(scenario, RD::AccelerationStructureGeometryType::STATIC);
+
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
 	render_pass++;

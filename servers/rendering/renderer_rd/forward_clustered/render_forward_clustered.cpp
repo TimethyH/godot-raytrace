@@ -40,17 +40,20 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 
+#if defined(VULKAN_ENABLED)
+#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+#endif
+#if defined(METAL_ENABLED)
+#include "drivers/metal/rendering_context_driver_metal.h"
+#endif
+
 using namespace RendererSceneRenderImplementation;
 
 #define PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION 1
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
-#define RAYTRACING_TEST
-
-#ifdef RAYTRACING_TEST
-#include "servers/rendering/raytracing/render_raytracing_rd.h"
-#endif
+//#define RAYTRACING_TEST
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
@@ -2197,7 +2200,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// TODO should move to the constructor 
 
 	RendererRD::RaytraceRD test;
-	test.init(rb->get_render_target(), RID());
+	test.init();
 
 #endif
 	{
@@ -3801,6 +3804,31 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+}
+
+void RendererSceneRenderImplementation::RenderForwardClustered::_trace_rays(RenderSceneDataRD &scene_data) {
+	// TODO Begin render label
+
+	//RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
+
+	//rd->raytracing_list_begin();
+
+	//rd->acceleration_structure_build(); // blas
+	//rd->acceleration_structure_build(); // tlas
+
+	//rd->raytracing_list_bind_raytracing_pipeline(); // bind list
+
+	//// Bind resources
+	//rd->raytracing_list_bind_uniform_set();
+	//rd->raytracing_list_set_push_constant();
+
+	//rd->raytracing_list_trace_rays(); // width height
+
+	//// Pipeline barier function here
+
+	//rd->raytracing_list_end();
+
+	// TODO End label
 }
 
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {

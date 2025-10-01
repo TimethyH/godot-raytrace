@@ -2708,8 +2708,6 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 			p_memory_barriers.size(), vk_memory_barriers,
 			p_buffer_barriers.size(), vk_buffer_barriers,
 			p_texture_barriers.size(), vk_image_barriers);
-
-
 }
 
 /****************/
@@ -5508,13 +5506,23 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p
 	VkDeviceSize buffer_offset = vf_info->vk_attributes[0].offset;
 
 	VkDeviceAddress vertex_address = buffer_get_device_address(p_vertex_buffer) + buffer_offset;
-	VkDeviceAddress index_address = buffer_get_device_address(p_index_buffer) + p_index_offset_bytes;
+
+	VkDeviceAddress index_address = 0;
+
+	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
+
+	if (p_index_buffer) {
+		index_address = buffer_get_device_address(p_index_buffer) + p_index_offset_bytes;
+		accel_info->geometry.geometry.triangles.indexType = p_index_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+		accel_info->geometry.geometry.triangles.indexData.deviceAddress = index_address;
+	} else {
+		accel_info->geometry.geometry.triangles.indexType = VK_INDEX_TYPE_NONE_KHR;
+		accel_info->geometry.geometry.triangles.indexData.deviceAddress = 0;
+	}
 
 	VkDeviceSize vertex_stride = vf_info->vk_bindings[0].stride;
 	VkFormat vertex_format = vf_info->vk_attributes[0].format;
 	uint32_t max_vertex = p_vertex_count ? p_vertex_count - 1 : 0;
-
-	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
 
 	accel_info->geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
 	accel_info->geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
@@ -5524,8 +5532,6 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p
 	accel_info->geometry.geometry.triangles.vertexFormat = vertex_format;
 	accel_info->geometry.geometry.triangles.vertexData.deviceAddress = vertex_address;
 	accel_info->geometry.geometry.triangles.vertexStride = vertex_stride;
-	accel_info->geometry.geometry.triangles.indexType = p_index_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-	accel_info->geometry.geometry.triangles.indexData.deviceAddress = index_address;
 	accel_info->geometry.geometry.triangles.transformData.deviceAddress = 0;
 	// Number of vertices in vertexData minus one, aka max vertex index.
 	accel_info->geometry.geometry.triangles.maxVertex = max_vertex;
@@ -5561,7 +5567,6 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p
 	return AccelerationStructureID();
 #endif
 }
-
 
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
 static _FORCE_INLINE_ void _store_transform_transposed_3x4(const Transform3D &p_mtx, VkTransformMatrixKHR &r_mtx) {
