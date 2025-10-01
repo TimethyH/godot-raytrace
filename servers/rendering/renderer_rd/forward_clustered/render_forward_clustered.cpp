@@ -2199,10 +2199,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 #else
 	// TODO should move to the constructor 
 
-	RendererRD::RaytraceRD test;
-	test.init();
+	//RendererRD::RaytraceRD test;
+	//test.init();
 
 #endif
+
 	{
 		if (ce_post_opaque_resolved_color) {
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
@@ -2387,6 +2388,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
 	}
+
+	RD::get_singleton()->draw_command_end_label();
+
+	raytracing_rd.setup_uniform_data(rb->get_internal_texture(), RD::get_singleton()->dynamic_tlas);
+
+	RENDER_TIMESTAMP("Raytracing");
+
+	RD::get_singleton()->draw_command_begin_label("Trace rays");
+
+	raytracing_rd.trace_rays(RD::get_singleton()->dynamic_tlas, RID());
 
 	RD::get_singleton()->draw_command_end_label();
 
@@ -5091,6 +5102,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
+	raytracing_rd.init();
 }
 
 RenderForwardClustered::~RenderForwardClustered() {

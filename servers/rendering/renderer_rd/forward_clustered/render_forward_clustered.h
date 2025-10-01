@@ -46,6 +46,7 @@
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
 #include "servers/rendering/raytracing/basic_raytrace.glsl.gen.h"
+#include "servers/rendering/raytracing/render_raytracing_rd.h"
 
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
 
@@ -813,7 +814,8 @@ private:
 
 	BasicRaytraceRD raytracing_shader;
 
-public:
+	RendererRD::RaytraceRD raytracing_rd;
+ public:
 	static RenderForwardClustered *get_singleton() { return singleton; }
 
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }

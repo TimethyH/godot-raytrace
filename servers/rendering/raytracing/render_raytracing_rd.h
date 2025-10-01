@@ -14,17 +14,19 @@
 namespace RendererRD {
 
 // Forward declare RendererSceneRenderRD so we can pass it into some of our methods, these classes are pretty tightly bound
-class RendererSceneRenderRD;
-class RenderSceneBuffersRD;
+
+//class RenderDataRD;
 
 class RaytraceRD {
 public:
 	//RaytraceRD();
-	void init(RID render_target, RID tlas);
+	void init();
+	void setup_uniform_data(RID render_targe, RID tlas);
 
 	~RaytraceRD();
 
-	void trace_rays(RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data);
+	// RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data
+	void trace_rays(RID tlas, RID blas);
 
 	struct RaySceneState {
 		struct UBO {
