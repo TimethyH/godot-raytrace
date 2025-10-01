@@ -3103,13 +3103,11 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
+	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
+
 	// Prepare the light - camera volume culling system.
 	light_culler->prepare_camera(p_camera_data->main_transform, p_camera_data->main_projection);
-
-	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
-
-	RD::get_singleton()->setup_raytracing_acceleration_structures(scenario, RD::AccelerationStructureGeometryType::STATIC);
 
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
@@ -3485,6 +3483,13 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	if (p_viewport.is_valid()) {
 		occluders_tex = RSG::viewport->viewport_get_occluder_debug_texture(p_viewport);
 		prev_camera_data = RSG::viewport->viewport_get_prev_camera_data(p_viewport);
+	}
+
+	static bool first_run = true;
+	if (first_run) {
+		RD::get_singleton()->setup_raytracing_acceleration_structures(scenario, RD::AccelerationStructureGeometryType::STATIC);
+		RD::get_singleton()->setup_raytracing_acceleration_structures(scenario, RD::AccelerationStructureGeometryType::DYNAMIC);
+		first_run = false;
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");

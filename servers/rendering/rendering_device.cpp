@@ -248,11 +248,16 @@ RenderingDevice *RenderingDevice::get_singleton() {
 
 LocalVector<RID> RenderingDevice::mesh_instance_blases_create(RID p_mesh_rid, RID p_mesh_instance_rid) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-
 	RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->mesh_instance_owner.get_or_null(p_mesh_instance_rid);
-	RendererRD::MeshStorage::Mesh *mesh = mesh_instance->mesh;
-
 	LocalVector<RID> blases;
+
+	// Might not be necessary since mesh_instance is already checked
+	if (!mesh_instance) {
+		ERR_PRINT("Invalid mesh RID for BLAS creation");
+		return blases;
+	}
+
+	RendererRD::MeshStorage::Mesh *mesh = mesh_instance->mesh;
 
 	// Might not be necessary since mesh_instance is already checked
 	if (!mesh) {
@@ -404,7 +409,7 @@ void RenderingDevice::setup_raytracing_acceleration_structures(void *p_scenario,
 		RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->mesh_instance_owner.get_or_null(instance->mesh_instance);
 
 		// Might be unnecessary because of base_type == INSTANCE_MESH
-		if (mesh_instance) {
+		if (!mesh_instance) {
 			instance_list = instance_list->next();
 			continue;
 		}
@@ -430,6 +435,8 @@ void RenderingDevice::setup_raytracing_acceleration_structures(void *p_scenario,
 				transforms.push_back(instance->transform);
 			}
 		}
+
+		instance_list = instance_list->next();
 	}
 
 	// CHECK: Flags might be incorrect.
@@ -456,8 +463,6 @@ void RenderingDevice::setup_raytracing_acceleration_structures(void *p_scenario,
 		dynamic_blases = blases;
 		dynamic_tlas = tlas;
 	}
-
-	instance_list = instance_list->next();
 }
 
 /***************************/
@@ -4835,7 +4840,7 @@ RID RenderingDevice::_blas_create(RID p_vertex_array, RID p_index_array, BitFiel
 		geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
 	}
 
-	acceleration_structure.driver_id = driver->_blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits);
+	acceleration_structure.driver_id = driver->blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits);
 	ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to create BLAS.");
 	acceleration_structure.vertex_array = p_vertex_array;
 	acceleration_structure.index_array = p_index_array;
