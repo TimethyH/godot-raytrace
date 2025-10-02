@@ -99,14 +99,14 @@ RaytraceRD::~RaytraceRD() {
 }
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
-void RaytraceRD::trace_rays(RID tlas, RID blas, Size2i viewport_size) {
+void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
 	//RayPushConstant ray_push_constant;
 
 	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
 
 	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	RD::RaytracingListID LID = rd->raytracing_list_begin();
+	//RD::RaytracingListID LID = rd->raytracing_list_begin();
 
 	// Update the acceleration structures preferably refit
 	//rd->acceleration_structure_build(blas); // blas
@@ -122,6 +122,6 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, Size2i viewport_size) {
 
 	// Pipeline barier function here
 
-	rd->raytracing_list_end();
+	//rd->raytracing_list_end();
 }
 } //namespace RendererRD

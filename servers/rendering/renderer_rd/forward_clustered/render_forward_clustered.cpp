@@ -2403,7 +2403,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_end_label();
 
+	RD::get_singleton()->draw_command_begin_label("Trace rays");
+	RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
+
 	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
+
 
 	if (tlasID != RID()) {
 		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
@@ -2412,11 +2416,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 
-		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), rb->get_internal_size());
+		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
 
 		RD::get_singleton()->draw_command_end_label();
 
 	}
+
+	RD::get_singleton()->raytracing_list_end();
+
+	RD::get_singleton()->draw_command_end_label();
 
 	RENDER_TIMESTAMP("Resolve");
 
