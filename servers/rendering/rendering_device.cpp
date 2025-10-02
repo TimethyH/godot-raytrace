@@ -4788,8 +4788,8 @@ Error RenderingDevice::acceleration_structure_build(RID p_acceleration_structure
 			IndexArray *index_array = index_array_owner.get_or_null(accel->index_array);
 			if (index_array && index_array->draw_tracker) {
 				src_trackers.append(index_array->draw_tracker);
+				_check_transfer_worker_index_array(index_array);
 			}
-			_check_transfer_worker_index_array(index_array);
 
 		} break;
 		case RDD::ACCELERATION_STRUCTURE_TYPE_TLAS: {

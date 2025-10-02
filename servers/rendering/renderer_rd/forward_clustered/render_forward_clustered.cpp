@@ -1664,10 +1664,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	static int first_run = 0;
-	if (first_run > 20) {
+	if (first_run == 1) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
 	}
-	else {
+	else if (first_run <= 1) {
 		first_run++;
 	}
 	//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
