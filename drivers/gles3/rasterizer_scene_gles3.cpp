@@ -46,6 +46,8 @@
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_server_globals.h"
 
+#include "servers/rendering/renderer_scene_cull.h"
+
 #ifdef GLES3_ENABLED
 
 RasterizerSceneGLES3 *RasterizerSceneGLES3::singleton = nullptr;
@@ -2236,10 +2238,16 @@ void RasterizerSceneGLES3::_render_shadow_pass(RID p_light, RID p_shadow_atlas, 
 	glBindFramebuffer(GL_FRAMEBUFFER, GLES3::TextureStorage::system_fbo);
 }
 
-void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, void *p_scene_cull_data, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+	RendererSceneCull::InstanceCullResult *scene_cull_data = reinterpret_cast<RendererSceneCull::InstanceCullResult *>(p_scene_cull_data);
 	GLES3::TextureStorage *texture_storage = GLES3::TextureStorage::get_singleton();
 	GLES3::Config *config = GLES3::Config::get_singleton();
 	RENDER_TIMESTAMP("Setup 3D Scene");
+
+	// Needed for rendering empty scene
+	PagedArray<RenderGeometryInstance *> empty_geometry_instances;
+	PagedArray<RID> empty_light_instances;
+	PagedArray<RID> empty_reflection_probes;
 
 	bool apply_color_adjustments_in_post = false;
 	bool is_reflection_probe = p_reflection_probe.is_valid();
@@ -2296,9 +2304,16 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		render_data.z_near = p_camera_data->main_projection.get_z_near();
 		render_data.z_far = p_camera_data->main_projection.get_z_far();
 
-		render_data.instances = &p_instances;
-		render_data.lights = &p_lights;
-		render_data.reflection_probes = &p_reflection_probes;
+		if (scene_cull_data) {
+			render_data.instances = &scene_cull_data->geometry_instances;
+			render_data.lights = &scene_cull_data->light_instances;
+			render_data.reflection_probes = &scene_cull_data->reflections;
+		}
+		else {
+			render_data.instances = &empty_geometry_instances;
+			render_data.lights = &empty_light_instances;
+			render_data.reflection_probes = &empty_reflection_probes;
+		}
 		render_data.environment = p_environment;
 		render_data.camera_attributes = p_camera_attributes;
 		render_data.shadow_atlas = p_shadow_atlas;

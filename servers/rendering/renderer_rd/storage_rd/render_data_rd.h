@@ -34,6 +34,8 @@
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
 #include "servers/rendering/storage/render_data.h"
 
+#include "servers/rendering/renderer_scene_cull.h"
+
 class RenderDataRD : public RenderData {
 	GDCLASS(RenderDataRD, RenderData);
 
@@ -94,4 +96,7 @@ public:
 	const RendererSceneRender::RenderSDFGIUpdateData *sdfgi_update_data = nullptr;
 
 	uint32_t voxel_gi_count = 0;
+
+	/* raytracing */
+	PagedArray<RendererSceneCull::InstanceData> *instance_data_before_culling = nullptr;
 };

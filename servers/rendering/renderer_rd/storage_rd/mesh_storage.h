@@ -75,7 +75,7 @@ private:
 
 	struct MeshInstance;
 
-	friend class RenderingDevice;
+	friend class RenderForwardClustered;
 	struct Mesh {
 		struct Surface {
 			RS::PrimitiveType primitive = RS::PRIMITIVE_POINTS;
@@ -370,8 +370,6 @@ public:
 	Mesh *get_mesh(RID p_rid) { return mesh_owner.get_or_null(p_rid); }
 	bool owns_mesh(RID p_rid) { return mesh_owner.owns(p_rid); }
 
-	LocalVector<RID> mesh_get_owned_list();
-
 	virtual RID mesh_allocate() override;
 	virtual void mesh_initialize(RID p_mesh) override;
 	virtual void mesh_free(RID p_rid) override;
@@ -406,6 +404,8 @@ public:
 
 	virtual void mesh_set_path(RID p_mesh, const String &p_path) override;
 	virtual String mesh_get_path(RID p_mesh) const override;
+
+	RID surface_get_index_array(void *p_surface) const;
 
 	virtual void mesh_clear(RID p_mesh) override;
 	virtual void mesh_surface_remove(RID p_mesh, int p_surface) override;

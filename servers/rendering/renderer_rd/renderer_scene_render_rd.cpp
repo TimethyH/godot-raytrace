@@ -42,6 +42,8 @@
 #include "servers/rendering/shader_include_db.h"
 #include "servers/rendering/storage/camera_attributes_storage.h"
 
+#include "servers/rendering/renderer_scene_cull.h"
+
 void get_vogel_disk(float *r_kernel, int p_sample_count) {
 	const float golden_angle = 2.4;
 
@@ -1300,9 +1302,20 @@ void RendererSceneRenderRD::_post_prepass_render(RenderDataRD *p_render_data, bo
 	}
 }
 
-void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, void *p_scene_cull_data, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+	RendererSceneCull::InstanceCullResult *scene_cull_data = reinterpret_cast<RendererSceneCull::InstanceCullResult *>(p_scene_cull_data);
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+
+	// Needed for rendering empty scene
+	// Since I'm not sure if leaving these uninitialized in RenderSceneDataRD causes UB, I found this a safe alternative.
+	PagedArray<RenderGeometryInstance *> empty_geometry_instances;
+	PagedArray<RID> empty_light_instances;
+	PagedArray<RID> empty_reflection_probes;
+	PagedArray<RID> empty_voxel_gi_instances;
+	PagedArray<RID> empty_decals;
+	PagedArray<RID> empty_lightmaps;
+	PagedArray<RID> empty_fog_volumes;
 
 	// getting this here now so we can direct call a bunch of things more easily
 	ERR_FAIL_COND(p_render_buffers.is_null());
@@ -1375,13 +1388,34 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.render_buffers = rb;
 		render_data.scene_data = &scene_data;
 
-		render_data.instances = &p_instances;
-		render_data.lights = &p_lights;
-		render_data.reflection_probes = &p_reflection_probes;
-		render_data.voxel_gi_instances = &p_voxel_gi_instances;
-		render_data.decals = &p_decals;
-		render_data.lightmaps = &p_lightmaps;
-		render_data.fog_volumes = &p_fog_volumes;
+		if (scene_cull_data) {
+			render_data.instances = &scene_cull_data->geometry_instances;
+			render_data.lights = &scene_cull_data->light_instances;
+			render_data.reflection_probes = &scene_cull_data->reflections;
+			render_data.voxel_gi_instances = &scene_cull_data->voxel_gi_instances;
+			render_data.decals = &scene_cull_data->decals;
+			render_data.lightmaps = &scene_cull_data->lightmaps;
+			render_data.fog_volumes = &scene_cull_data->fog_volumes;
+			render_data.instance_data_before_culling = scene_cull_data->instance_data_before_culling;
+		} else {
+			render_data.instances = &empty_geometry_instances;
+			render_data.lights = &empty_light_instances;
+			render_data.reflection_probes = &empty_reflection_probes;
+			render_data.voxel_gi_instances = &empty_voxel_gi_instances;
+			render_data.decals = &empty_decals;
+			render_data.lightmaps = &empty_lightmaps;
+			render_data.fog_volumes = &empty_fog_volumes;
+			render_data.instance_data_before_culling = nullptr;
+		}
+
+		render_data.instances = &scene_cull_data->geometry_instances;
+		render_data.lights = &scene_cull_data->light_instances;
+		render_data.reflection_probes = &scene_cull_data->reflections;
+		render_data.voxel_gi_instances = &scene_cull_data->voxel_gi_instances;
+		render_data.decals = &scene_cull_data->decals;
+		render_data.lightmaps = &scene_cull_data->lightmaps;
+		render_data.fog_volumes = &scene_cull_data->fog_volumes;
+		render_data.instance_data_before_culling = scene_cull_data->instance_data_before_culling;
 		render_data.environment = p_environment;
 		render_data.compositor = p_compositor;
 		render_data.camera_attributes = p_camera_attributes;

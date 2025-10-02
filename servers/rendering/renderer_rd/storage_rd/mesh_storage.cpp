@@ -214,9 +214,6 @@ bool MeshStorage::free(RID p_rid) {
 	return false;
 }
 
-LocalVector<RID> RendererRD::MeshStorage::mesh_get_owned_list() {
-	return mesh_owner.get_owned_list();
-}
 
 /* MESH API */
 
@@ -2508,4 +2505,8 @@ void MeshStorage::skeleton_update_dependency(RID p_skeleton, DependencyTracker *
 	ERR_FAIL_NULL(skeleton);
 
 	p_instance->update_dependency(&skeleton->dependency);
+}
+
+RID MeshStorage::surface_get_index_array(void *p_surface) const {
+	return reinterpret_cast<RendererRD::MeshStorage::Mesh::Surface *>(p_surface)->index_array;
 }
