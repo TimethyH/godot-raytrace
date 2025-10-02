@@ -1663,10 +1663,12 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
-	static bool first_run = true;
-	if (first_run) {
+	static int first_run = 0;
+	if (first_run > 20) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
-		first_run = false;
+	}
+	else {
+		first_run++;
 	}
 	//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
 
@@ -3812,7 +3814,7 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
-LocalVector<RID> RenderForwardClustered::surface_create_blases(RID p_mesh_instance_rid, void *p_surface) {
+LocalVector<RID> RenderForwardClustered::surface_create_blases(void *p_surface) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	GeometryInstanceSurfaceDataCache *surf = reinterpret_cast<GeometryInstanceSurfaceDataCache *>(p_surface);
 	//RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->mesh_instance_owner.get_or_null(p_mesh_instance_rid);
@@ -3836,7 +3838,7 @@ LocalVector<RID> RenderForwardClustered::surface_create_blases(RID p_mesh_instan
 			(1 << RS::ARRAY_NORMAL) |
 			(1 << RS::ARRAY_INDEX);
 
-	mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(p_mesh_instance_rid, surf->surface_index, input_mask, false, vertex_array, vertex_format);
+	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
 
 	vertex_arrays.push_back(vertex_array);
 	index_arrays.push_back(index_array);
@@ -3868,10 +3870,10 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	LocalVector<RID> local_blases;
 	LocalVector<Transform3D> transforms;
 
-	PagedArray<RendererSceneCull::InstanceData> *instance_data = p_render_data->instance_data_before_culling;
+	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
 	// Iterate ALL instances in the scenario
-	for (uint64_t i = 0; i < instance_data->size(); i++) {
-		RendererSceneCull::InstanceData &idata = (*instance_data)[i];
+	for (uint64_t i = 0; i < instance_data.size(); i++) {
+		RendererSceneCull::InstanceData &idata = instance_data[i];
 
 		// Check if it's geometry
 		uint32_t base_type = idata.flags & RendererSceneCull::InstanceData::FLAG_BASE_TYPE_MASK;
@@ -3884,14 +3886,20 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		GeometryInstanceForwardClustered *inst =
 				static_cast<GeometryInstanceForwardClustered *>(geom);
 
+		if (!inst->surface_caches || inst->surface_caches->primitive != RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES)
+		{
+			continue;
+		}
+
 		RID mesh_rid = idata.base_rid;
-		Transform3D world_transform = inst->transform;
+		Transform3D world_transform = geom->get_transform();
 
 		// Build BLAS for unique meshes
 		if (!rd->has_blas(mesh_rid)) {
-			LocalVector<RID> new_blases = surface_create_blases(inst->mesh_instance, inst->surface_caches);
+			LocalVector<RID> new_blases = surface_create_blases(inst->surface_caches);
 			for (int64_t j = 0; j < new_blases.size(); j++) {
 				local_blases.push_back(new_blases[j]);
+				rd->blases_add_to_map(mesh_rid, new_blases);
 				transforms.push_back(world_transform);
 			}
 		} else {
@@ -3909,6 +3917,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	}
 
 	// This prevents the local blases from overwriting the current acceleration structure if the new structure is invalid
+	blases.clear(); // Maybe free blases?
 	blases = local_blases;
 
 	for (int64_t i = 0; i < blases.size(); ++i) {

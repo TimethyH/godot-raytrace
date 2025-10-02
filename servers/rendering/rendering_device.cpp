@@ -250,6 +250,13 @@ bool RenderingDevice::has_blas(RID p_mesh_rid) {
 	return mesh_blases_map.has(p_mesh_rid);
 }
 
+void RenderingDevice::blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases) {
+	if (mesh_blases_map.has(p_mesh_rid)) {
+		WARN_PRINT("This mesh id already contained blases and so the old ones are overwritten");
+	}
+	mesh_blases_map[p_mesh_rid] = p_blases;
+}
+
 LocalVector<RID> &RenderingDevice::get_type_blases(AccelerationStructureGeometryType p_type) {
 	if (p_type == STATIC) {
 		return static_blases;

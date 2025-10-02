@@ -1273,6 +1273,7 @@ public:
 	};
 
 	bool has_blas(RID p_mesh_rid);
+	void blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases);
 	LocalVector<RID> &get_type_blases(AccelerationStructureGeometryType p_type);
 	RID &get_type_tlas(AccelerationStructureGeometryType p_type);
 	LocalVector<RID> blases_get_or_null(RID p_mesh_rid);
