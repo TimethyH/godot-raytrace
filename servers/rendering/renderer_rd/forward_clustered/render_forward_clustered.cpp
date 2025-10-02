@@ -2403,28 +2403,37 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_end_label();
 
-	RD::get_singleton()->draw_command_begin_label("Trace rays");
-	RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
+	
 
 	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
 
 
-	if (tlasID != RID()) {
-		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
+	RENDER_TIMESTAMP("Raytracing");
 
-		RENDER_TIMESTAMP("Raytracing");
+	
+
+	if (tlasID != RID()) {
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
+		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
 
+		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
+		
 		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
 
+		RD::get_singleton()->raytracing_list_end();
+
 		RD::get_singleton()->draw_command_end_label();
+		//RD::get_singleton()->draw_command_begin_label("Trace rays");
+
+		
+
+		//RD::get_singleton()->draw_command_end_label();
 
 	}
 
-	RD::get_singleton()->raytracing_list_end();
 
-	RD::get_singleton()->draw_command_end_label();
+	
 
 	RENDER_TIMESTAMP("Resolve");
 
@@ -3858,6 +3867,9 @@ LocalVector<RID> RenderForwardClustered::surface_create_blases(void *p_surface) 
 	Vector<RID> index_arrays;
 
 	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
+	if (index_array.is_null()) {
+		return blases;
+	}
 	RID vertex_array;
 	RenderingDevice::VertexFormatID vertex_format;
 
