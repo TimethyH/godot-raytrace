@@ -266,7 +266,7 @@ LocalVector<RID> &RenderingDevice::get_type_blases(AccelerationStructureGeometry
 	}
 }
 
-RID &RenderingDevice::get_type_tlas(AccelerationStructureGeometryType p_type) {
+RID &RenderingDevice::tlas_get_type(AccelerationStructureGeometryType p_type) {
 	if (p_type == STATIC) {
 		return static_tlas;
 	} else {

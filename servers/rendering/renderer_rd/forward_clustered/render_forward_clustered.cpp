@@ -2403,15 +2403,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_end_label();
 
-	raytracing_rd.setup_uniform_data(rb->get_internal_texture(), RD::get_singleton()->dynamic_tlas);
+	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
 
-	RENDER_TIMESTAMP("Raytracing");
+	if (tlasID != RID()) {
+		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
 
-	RD::get_singleton()->draw_command_begin_label("Trace rays");
+		RENDER_TIMESTAMP("Raytracing");
 
-	raytracing_rd.trace_rays(RD::get_singleton()->dynamic_tlas, RID());
+		RD::get_singleton()->draw_command_begin_label("Trace rays");
 
-	RD::get_singleton()->draw_command_end_label();
+		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), rb->get_internal_size());
+
+		RD::get_singleton()->draw_command_end_label();
+
+	}
 
 	RENDER_TIMESTAMP("Resolve");
 
@@ -3880,7 +3885,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 
 	LocalVector<RID> &blases = rd->get_type_blases(p_type);
-	RID &tlas = rd->get_type_tlas(p_type);
+	RID &tlas = rd->tlas_get_type(p_type);
 
 	LocalVector<RID> local_blases;
 	LocalVector<Transform3D> transforms;

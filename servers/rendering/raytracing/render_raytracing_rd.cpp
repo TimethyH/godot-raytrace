@@ -83,13 +83,13 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 		uniforms.push_back(u);
 	}
 
-	//{
-	//	RD::Uniform u;
-	//	u.binding = 1;
-	//	u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
-	//	u.append_id(tlas);
-	//	uniforms.push_back(u);
-	//}
+	{
+		RD::Uniform u;
+		u.binding = 1;
+		u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
+		u.append_id(tlas);
+		uniforms.push_back(u);
+	}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
@@ -99,7 +99,7 @@ RaytraceRD::~RaytraceRD() {
 }
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
-void RaytraceRD::trace_rays(RID tlas, RID blas) {
+void RaytraceRD::trace_rays(RID tlas, RID blas, Size2i viewport_size) {
 	//RayPushConstant ray_push_constant;
 
 	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
@@ -118,7 +118,7 @@ void RaytraceRD::trace_rays(RID tlas, RID blas) {
 	rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
 	//rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
 
-	rd->raytracing_list_trace_rays(LID, 1200, 1200); // width height
+	rd->raytracing_list_trace_rays(LID, (uint32_t)viewport_size.width, (uint32_t)viewport_size.height); // width height
 
 	// Pipeline barier function here
 

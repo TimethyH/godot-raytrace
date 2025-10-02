@@ -26,7 +26,7 @@ public:
 	~RaytraceRD();
 
 	// RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data
-	void trace_rays(RID tlas, RID blas);
+	void trace_rays(RID tlas, RID blas, Size2i viewport_size);
 
 	struct RaySceneState {
 		struct UBO {

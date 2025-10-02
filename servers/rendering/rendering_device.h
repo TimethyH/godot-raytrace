@@ -1275,7 +1275,7 @@ public:
 	bool has_blas(RID p_mesh_rid);
 	void blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases);
 	LocalVector<RID> &get_type_blases(AccelerationStructureGeometryType p_type);
-	RID &get_type_tlas(AccelerationStructureGeometryType p_type);
+	RID &tlas_get_type(AccelerationStructureGeometryType p_type);
 	LocalVector<RID> blases_get_or_null(RID p_mesh_rid);
 	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
 	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);

@@ -77,18 +77,18 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 		RD::Uniform u;
 		u.binding = 0;
 		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-		RID render_texture = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture(render_target);
+		RID render_texture = render_target; //RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture();
 		u.append_id(render_texture);
 		uniforms.push_back(u);
 	}
 
-	//{
-	//	RD::Uniform u;
-	//	u.binding = 1;
-	//	u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
-	//	u.append_id(tlas);
-	//	uniforms.push_back(u);
-	//}
+	{
+		RD::Uniform u;
+		u.binding = 1;
+		u.uniform_type = RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE;
+		u.append_id(tlas);
+		uniforms.push_back(u);
+	}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
@@ -98,34 +98,29 @@ RaytraceRD::~RaytraceRD() {
 }
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
-void RaytraceRD::trace_rays(RID tlas, RID blas, RS::CompositorEffectCallbackType p_callback_type, const RenderDataRD *p_render_data) {
-	//RayPushConstant ray_push_constant;
+void RaytraceRD::trace_rays(RID tlas, RID blas, Size2i viewport_size) {
+	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
-	if (p_callback_type == RS::COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_TRANSPARENT) {
-		RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	rd->draw_command_begin_label("Trace rays");
 
-		rd->draw_command_begin_label("Trace rays");
+	RD::RaytracingListID LID = rd->raytracing_list_begin();
 
-		RD::RaytracingListID LID = rd->raytracing_list_begin();
+	// Update the acceleration structures preferably refit
+	//rd->acceleration_structure_build(blas); // blas
+	//rd->acceleration_structure_build(tlas); // tlas
 
-		// Update the acceleration structures preferably refit
-		//rd->acceleration_structure_build(blas); // blas
-		//rd->acceleration_structure_build(tlas); // tlas
+	rd->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
 
-		rd->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
+	// Bind resources
+	rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
+	//rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
 
-		// Bind resources
-		rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
-		//rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
+	rd->raytracing_list_trace_rays(LID, (uint32_t)viewport_size.width, (uint32_t)viewport_size.height); // width height
 
-		rd->raytracing_list_trace_rays(LID, 800, 800); // width height
+	// Pipeline barier function here
 
-		// Pipeline barier function here
+	rd->raytracing_list_end();
 
-		rd->raytracing_list_end();
-
-		rd->draw_command_end_label();
-	}
+	rd->draw_command_end_label();
 }
 } //namespace RendererRD
