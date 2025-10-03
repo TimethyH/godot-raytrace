@@ -2414,6 +2414,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	if (tlasID != RID()) {
 
+		raytracing_rd.update_buffer(p_render_data->scene_data->view_projection->inverse(), p_render_data->scene_data->cam_transform);
+		
+
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
 

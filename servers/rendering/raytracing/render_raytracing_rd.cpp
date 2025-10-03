@@ -56,6 +56,7 @@ void RaytraceRD::init() {
 	raytracing_shader.version = raytracing_shader.shader.version_create(true);
 	raytracing_shader.default_shader_rd = raytracing_shader.shader.version_get_shader(raytracing_shader.version, 0);
 
+	update_buffer(Projection(), Transform3D());
 	setup_uniform_data(RID(), RID());
 
 	// Specify the shader stages to get the compiled spriv source code
@@ -69,10 +70,21 @@ void RaytraceRD::init() {
 	raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(raytracing_shader.default_shader_rd);
 
 	// Set uniform bindings
-	//ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
+	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
+}
+
+void RaytraceRD::update_buffer(Projection view_proj, Transform3D cam_pos) {
+	//ubo set cam
+	ray_scene_state.ubo.camera_pos[0] = cam_pos.get_origin().x;
+	ray_scene_state.ubo.camera_pos[1] = cam_pos.get_origin().y;
+	ray_scene_state.ubo.camera_pos[2] = cam_pos.get_origin().z;
+	RendererRD::MaterialStorage::store_camera(view_proj, ray_scene_state.ubo.view_proj);
+
+	RD::get_singleton()->buffer_update(ray_scene_state.uniform_buffer, 0, sizeof(RaySceneState::UBO), &ray_scene_state.ubo);
 }
 
 void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
+	
 	Vector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -91,11 +103,20 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 		uniforms.push_back(u);
 	}
 
+	{
+		RD::Uniform u;
+		u.binding = 2;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.append_id(ray_scene_state.uniform_buffer);
+		uniforms.push_back(u);
+	}
+
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
 
 RaytraceRD::~RaytraceRD() {
 	raytracing_shader.shader.version_free(raytracing_shader.version);
+	RD::get_singleton()->free(ray_scene_state.uniform_buffer);
 }
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
