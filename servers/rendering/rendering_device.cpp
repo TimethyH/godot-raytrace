@@ -247,21 +247,20 @@ RenderingDevice *RenderingDevice::get_singleton() {
 //}
 
 bool RenderingDevice::has_blas(RID p_mesh_rid) {
-	return mesh_blases_map.has(p_mesh_rid);
+	return mesh_blas_map.has(p_mesh_rid);
 }
 
-void RenderingDevice::blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases) {
-	if (mesh_blases_map.has(p_mesh_rid)) {
+void RenderingDevice::blas_add_to_map(RID p_mesh_rid, RID p_blas) {
+	if (mesh_blas_map.has(p_mesh_rid)) {
 		WARN_PRINT("This mesh id already contained blases and so the old ones are overwritten");
 	}
-	mesh_blases_map[p_mesh_rid] = p_blases;
+	mesh_blas_map[p_mesh_rid] = p_blas;
 }
 
 LocalVector<RID> &RenderingDevice::get_type_blases(AccelerationStructureGeometryType p_type) {
 	if (p_type == STATIC) {
 		return static_blases;
-	}
-	else {
+	} else {
 		return dynamic_blases;
 	}
 }
@@ -274,11 +273,11 @@ RID &RenderingDevice::tlas_get_type(AccelerationStructureGeometryType p_type) {
 	}
 }
 
-LocalVector<RID> RenderingDevice::blases_get_or_null(RID p_mesh_rid) {
-	if (mesh_blases_map.has(p_mesh_rid)) {
-		return mesh_blases_map[p_mesh_rid];
+RID RenderingDevice::blas_get_or_null(RID p_mesh_rid) {
+	if (mesh_blas_map.has(p_mesh_rid)) {
+		return mesh_blas_map[p_mesh_rid];
 	} else {
-		return LocalVector<RID>();
+		return RID();
 	}
 }
 
@@ -4796,7 +4795,7 @@ Error RenderingDevice::acceleration_structure_build(RID p_acceleration_structure
 			IndexArray *index_array = index_array_owner.get_or_null(accel->index_array);
 			if (index_array && index_array->draw_tracker) {
 				src_trackers.append(index_array->draw_tracker);
-				_check_transfer_worker_index_array(index_array);
+			_check_transfer_worker_index_array(index_array);
 			}
 
 		} break;

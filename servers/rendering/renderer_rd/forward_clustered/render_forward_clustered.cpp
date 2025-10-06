@@ -56,7 +56,7 @@ using namespace RendererSceneRenderImplementation;
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
-//#define RAYTRACING_TEST
+#define RAYTRACING_TEST
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
@@ -1664,10 +1664,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	static int first_run = 0;
-	if (first_run == 1) {
+	if (first_run == 20) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
 	}
-	else if (first_run <= 1) {
+
+	if (first_run <= 20) {
 		first_run++;
 	}
 	//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
@@ -2209,11 +2210,25 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 #else
-	// TODO should move to the constructor 
+	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
 
-	//RendererRD::RaytraceRD test;
-	//test.init();
+	RENDER_TIMESTAMP("Raytracing");
 
+	if (tlasID != RID()) {
+		RD::get_singleton()->draw_command_begin_label("Trace rays");
+		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
+
+		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
+
+		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
+
+		RD::get_singleton()->raytracing_list_end();
+
+		RD::get_singleton()->draw_command_end_label();
+		//RD::get_singleton()->draw_command_begin_label("Trace rays");
+
+		//RD::get_singleton()->draw_command_end_label();
+	}
 #endif
 
 	{
@@ -2402,38 +2417,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	RD::get_singleton()->draw_command_end_label();
-
-	
-
-	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
-
-
-	RENDER_TIMESTAMP("Raytracing");
-
-	
-
-	if (tlasID != RID()) {
-
-		RD::get_singleton()->draw_command_begin_label("Trace rays");
-		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
-
-		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
-		
-		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
-
-		RD::get_singleton()->raytracing_list_end();
-
-		RD::get_singleton()->draw_command_end_label();
-		//RD::get_singleton()->draw_command_begin_label("Trace rays");
-
-		
-
-		//RD::get_singleton()->draw_command_end_label();
-
-	}
-
-
-	
 
 	RENDER_TIMESTAMP("Resolve");
 
@@ -3851,25 +3834,15 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
-LocalVector<RID> RenderForwardClustered::surface_create_blases(void *p_surface) {
+RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	GeometryInstanceSurfaceDataCache *surf = reinterpret_cast<GeometryInstanceSurfaceDataCache *>(p_surface);
-	//RendererRD::MeshStorage::MeshInstance *mesh_instance = mesh_storage->mesh_instance_owner.get_or_null(p_mesh_instance_rid);
-
-	LocalVector<RID> blases;
 
 	if (surf == nullptr) {
-		return blases;
+		return RID();
 	}
-
-	// For raytracing, we need to combine all surfaces into a single BLAS
-	Vector<RID> vertex_arrays;
-	Vector<RID> index_arrays;
 
 	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
-	if (index_array.is_null()) {
-		return blases;
-	}
 	RID vertex_array;
 	RenderingDevice::VertexFormatID vertex_format;
 
@@ -3880,25 +3853,18 @@ LocalVector<RID> RenderForwardClustered::surface_create_blases(void *p_surface) 
 
 	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
 
-	vertex_arrays.push_back(vertex_array);
-	index_arrays.push_back(index_array);
-
-	if (vertex_arrays.is_empty()) {
+	if (vertex_array.is_null()) {
 		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
-		return blases;
+		return RID();
 	}
 
 	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
 	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
 
-	for (int64_t i = 0; i < vertex_arrays.size(); ++i) {
-		blases.push_back(RD::get_singleton()->blas_create(
-				vertex_arrays[i],
-				index_arrays[i],
-				geometry_bits));
-	}
-
-	return blases;
+	return RD::get_singleton()->blas_create(
+			vertex_array,
+			index_array,
+			geometry_bits);
 }
 
 void RenderForwardClustered::build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type) {
@@ -3926,8 +3892,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		GeometryInstanceForwardClustered *inst =
 				static_cast<GeometryInstanceForwardClustered *>(geom);
 
-		if (!inst->surface_caches || inst->surface_caches->primitive != RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES)
-		{
+		if (!inst->surface_caches || inst->surface_caches->primitive != RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES) {
 			continue;
 		}
 
@@ -3936,18 +3901,14 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 
 		// Build BLAS for unique meshes
 		if (!rd->has_blas(mesh_rid)) {
-			LocalVector<RID> new_blases = surface_create_blases(inst->surface_caches);
-			for (int64_t j = 0; j < new_blases.size(); j++) {
-				local_blases.push_back(new_blases[j]);
-				rd->blases_add_to_map(mesh_rid, new_blases);
-				transforms.push_back(world_transform);
-			}
+			RID new_blas = surface_create_blas(inst->surface_caches);
+			local_blases.push_back(new_blas);
+			rd->blas_add_to_map(mesh_rid, new_blas);
+			transforms.push_back(world_transform);
 		} else {
-			LocalVector<RID> new_blases = rd->blases_get_or_null(mesh_rid); // No check needed because of if-statement
-			for (int64_t j = 0; j < new_blases.size(); j++) {
-				local_blases.push_back(new_blases[j]);
-				transforms.push_back(world_transform);
-			}
+			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
+			local_blases.push_back(new_blas);
+			transforms.push_back(world_transform);
 		}
 	}
 
@@ -5162,8 +5123,6 @@ RenderForwardClustered::RenderForwardClustered() {
 #endif
 
 		scene_shader.init(defines);
-
-
 	}
 
 	/* shadow sampler */

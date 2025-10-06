@@ -1254,7 +1254,7 @@ private:
 
 	RID_Owner<InstancesBuffer, true> instances_buffer_owner;
 	RID_Owner<AccelerationStructure> acceleration_structure_owner;
-	AHashMap<RID, LocalVector<RID>> mesh_blases_map;
+	AHashMap<RID, RID> mesh_blas_map;
 
 public:
 	enum AccelerationStructureGeometryType {
@@ -1273,10 +1273,10 @@ public:
 	};
 
 	bool has_blas(RID p_mesh_rid);
-	void blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases);
+	void blas_add_to_map(RID p_mesh_rid, RID p_blas);
 	LocalVector<RID> &get_type_blases(AccelerationStructureGeometryType p_type);
 	RID &tlas_get_type(AccelerationStructureGeometryType p_type);
-	LocalVector<RID> blases_get_or_null(RID p_mesh_rid);
+	RID blas_get_or_null(RID p_mesh_rid);
 	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
 	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
 	void tlas_instances_buffer_fill(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
