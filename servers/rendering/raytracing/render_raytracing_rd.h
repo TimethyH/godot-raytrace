@@ -21,6 +21,7 @@ class RaytraceRD {
 public:
 	//RaytraceRD();
 	void init();
+	void update_buffer(Projection view_proj, Transform3D cam_pos);
 	void setup_uniform_data(RID render_targe, RID tlas);
 
 	~RaytraceRD();
@@ -30,12 +31,12 @@ public:
 
 	struct RaySceneState {
 		struct UBO {
-			float combined_reprojection[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 128
-			float view_inv_projections[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 256
-			float view_eye_offsets[RendererSceneRender::MAX_RENDER_VIEWS][4]; // 2 x 16 - 288
-
-			float z_near; // 4 - 292
-			float z_far; // 4 - 296
+			float camera_pos[3];
+			float align;
+			float view_proj[16]; // 64
+			
+			//float z_near; // 4 - 292
+			//float z_far; // 4 - 296
 		};
 
 		UBO ubo;
@@ -50,6 +51,7 @@ private:
 	// 128 is the max size of a push constant.
 	struct RayPushConstant {
 		float clear_color[3] = { 1.0f, 0.0f, 0.0f }; // 12
+		float dummy = 0; // 16
 	};
 
 	//RayPushConstant ray_pc;
