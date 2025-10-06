@@ -3842,7 +3842,7 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		return RID();
 	}
 
-	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
+	RID index_array = mesh_storage->surface_get_index_array(p_surface);
 	RID vertex_array;
 	RenderingDevice::VertexFormatID vertex_format;
 
