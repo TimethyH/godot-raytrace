@@ -121,28 +121,35 @@ RaytraceRD::~RaytraceRD() {
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
 void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
-	//RayPushConstant ray_push_constant;
+	RayPushConstant ray_push_constant;
+	ray_push_constant.clear_color[0] = { 1.0f};
+	ray_push_constant.clear_color[1] = { 0.0f};
+	ray_push_constant.clear_color[2] = { 1.0f};
+	ray_push_constant.dummy = 0;
+
+
+	Vector<uint8_t> push_constant_bytes;
+	push_constant_bytes.resize(sizeof(RayPushConstant));
+	memcpy(push_constant_bytes.ptrw(), &ray_push_constant, sizeof(RayPushConstant));
 
 	//memset(&ray_push_constant, 0, sizeof(RayPushConstant));
 
-	RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
+	//RenderingDevice *rd = RenderingServer::get_singleton()->get_rendering_device();
 
-	//RD::RaytracingListID LID = rd->raytracing_list_begin();
 
 	// Update the acceleration structures preferably refit
-	//rd->acceleration_structure_build(blas); // blas
-	//rd->acceleration_structure_build(tlas); // tlas
+	//RD::get_singleton()->acceleration_structure_build(blas); // blas
+	//RD::get_singleton()->acceleration_structure_build(tlas); // tlas
 
-	rd->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
+	RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
 
 	// Bind resources
-	rd->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
-	//rd->raytracing_list_set_push_constant(LID, &ray_push_constant, sizeof(RayPushConstant));
+	RD::get_singleton()->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);
+	RD::get_singleton()->raytracing_list_set_push_constant(LID, &push_constant_bytes, sizeof(RayPushConstant));
 
-	rd->raytracing_list_trace_rays(LID, (uint32_t)viewport_size.width, (uint32_t)viewport_size.height); // width height
+	RD::get_singleton()->raytracing_list_trace_rays(LID, (uint32_t)viewport_size.width, (uint32_t)viewport_size.height); // width height
 
 	// Pipeline barier function here
 
-	//rd->raytracing_list_end();
 }
 } //namespace RendererRD

@@ -20,6 +20,11 @@ struct hitPayload
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
+layout(push_constant) uniform PushConstants {
+    vec3 clear_color;
+	float dummy;
+} push;
+
 // Render target
 layout(set = 0, binding = 0, rgba32f) uniform image2D image;
 // Acceleration structure
