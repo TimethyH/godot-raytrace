@@ -1663,16 +1663,6 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
-	static int first_run = 0;
-	if (first_run == 20) {
-		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
-	}
-
-	if (first_run <= 20) {
-		first_run++;
-	}
-	//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
-
 	ERR_FAIL_NULL(p_render_data);
 
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
@@ -1686,6 +1676,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool is_reflection_probe = p_render_data->reflection_probe.is_valid();
 
 	static const int texture_multisamples[RS::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
+
+	static int first_run = 0;
+	if (first_run == 20) {
+		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
+		raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
+	}
+
+	if (first_run <= 20) {
+		first_run++;
+	}
+	//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
 
 	//first of all, make a new render pass
 	//fill up ubo
@@ -2215,7 +2216,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Raytracing");
 
 	if (tlasID != RID()) {
+		raytracing_rd.update_buffer(p_render_data->scene_data->get_cam_projection().inverse(), p_render_data->scene_data->cam_transform);
+
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
+
 		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
 
 		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
@@ -2225,9 +2229,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RD::get_singleton()->raytracing_list_end();
 
 		RD::get_singleton()->draw_command_end_label();
-		//RD::get_singleton()->draw_command_begin_label("Trace rays");
-
-		//RD::get_singleton()->draw_command_end_label();
 	}
 #endif
 
@@ -3936,31 +3937,6 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	rd->acceleration_structure_build(tlas);
 }
 
-void RendererSceneRenderImplementation::RenderForwardClustered::_trace_rays(RenderSceneDataRD &scene_data) {
-	// TODO Begin render label
-
-	//RenderingDevice *rd = RenderingServer::get_singleton()->create_local_rendering_device();
-
-	//rd->raytracing_list_begin();
-
-	//rd->acceleration_structure_build(); // blas
-	//rd->acceleration_structure_build(); // tlas
-
-	//rd->raytracing_list_bind_raytracing_pipeline(); // bind list
-
-	//// Bind resources
-	//rd->raytracing_list_bind_uniform_set();
-	//rd->raytracing_list_set_push_constant();
-
-	//rd->raytracing_list_trace_rays(); // width height
-
-	//// Pipeline barier function here
-
-	//rd->raytracing_list_end();
-
-	// TODO End label
-}
-
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {
 	Ref<RenderBufferDataForwardClustered> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
 
@@ -5219,7 +5195,6 @@ RenderForwardClustered::RenderForwardClustered() {
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
 #endif
-	raytracing_rd.init();
 }
 
 RenderForwardClustered::~RenderForwardClustered() {

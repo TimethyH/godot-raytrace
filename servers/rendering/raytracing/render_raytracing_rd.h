@@ -20,8 +20,8 @@ namespace RendererRD {
 class RaytraceRD {
 public:
 	//RaytraceRD();
-	void init();
-	void update_buffer(Projection view_proj, Transform3D cam_pos);
+	void init(const Projection &p_inv_view_proj, const Transform3D &p_cam_pos, RID p_render_buffer, RID p_tlas);
+	void update_buffer(const Projection& p_inv_view_proj, const Transform3D& cam_pos);
 	void setup_uniform_data(RID render_targe, RID tlas);
 
 	~RaytraceRD();
