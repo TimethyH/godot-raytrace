@@ -50,8 +50,7 @@ public:
 private:
 	// 128 is the max size of a push constant.
 	struct RayPushConstant {
-		float clear_color[3] = { 1.0f, 0.0f, 0.0f }; // 12
-		float dummy = 0; // 16
+		float clear_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 16
 	};
 
 	//RayPushConstant ray_pc;
