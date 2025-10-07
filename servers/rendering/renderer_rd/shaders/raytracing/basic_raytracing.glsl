@@ -6,8 +6,6 @@
 
 #GLOBALS
 
-#CODE : RAYTRACE
-
 struct hitPayload
 {
   vec3 hitValue;
@@ -20,15 +18,15 @@ struct hitPayload
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
-layout(push_constant) uniform PushConstants {
-    vec3 clear_color;
-	float dummy;
-} push;
 
 // Render target
 layout(set = 0, binding = 0, rgba32f) uniform image2D image;
 // Acceleration structure
 layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
+
+layout(push_constant) uniform PushConstants {
+    vec4 clear_color;
+} push;
 
 struct UBO{
 	vec3 cameraPos;
@@ -38,6 +36,8 @@ struct UBO{
 layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
+
+#CODE : RAYTRACE
 
 void main(){
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
@@ -61,7 +61,8 @@ void main(){
 		0
 	);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), push.clear_color);
+	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));
 }
 
 #[miss]
@@ -71,8 +72,6 @@ void main(){
 #VERSION_DEFINES
 
 #GLOBALS
-
-#CODE : RAYTRACE
 
 struct hitPayload
 {
@@ -85,6 +84,8 @@ struct hitPayload
 };
 
 layout(location = 0) rayPayloadInEXT hitPayload prd;
+
+#CODE : RAYTRACE
 
 void main() {
 	prd.hitValue = vec3(1.0, 0.0, 0.0);
@@ -98,8 +99,6 @@ void main() {
 
 #GLOBALS
 
-#CODE : RAYTRACE
-
 struct hitPayload
 {
   vec3 hitValue;
@@ -111,6 +110,8 @@ struct hitPayload
 };
 
 layout(location = 0) rayPayloadInEXT hitPayload prd;
+
+#CODE : RAYTRACE
 
 void main() {
 	prd.hitValue = vec3(0.0, 1.0, 0.0);
