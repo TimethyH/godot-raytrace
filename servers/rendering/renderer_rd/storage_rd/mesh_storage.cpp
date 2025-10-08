@@ -2508,5 +2508,5 @@ void MeshStorage::skeleton_update_dependency(RID p_skeleton, DependencyTracker *
 }
 
 RID MeshStorage::surface_get_index_array(void *p_surface) const {
-	return reinterpret_cast<RendererRD::MeshStorage::Mesh::Surface *>(p_surface)->index_array;
+	return reinterpret_cast<Mesh::Surface *>(p_surface)->index_array;
 }

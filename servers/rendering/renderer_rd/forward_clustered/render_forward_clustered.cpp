@@ -1677,6 +1677,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	static const int texture_multisamples[RS::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
+#ifdef RAYTRACING_TEST
 	static int first_run = 0;
 	if (first_run == 20) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
@@ -1686,8 +1687,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (first_run <= 20) {
 		first_run++;
 	}
-	//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
-
+//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
+#endif
 	//first of all, make a new render pass
 	//fill up ubo
 
@@ -3843,7 +3844,7 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		return RID();
 	}
 
-	RID index_array = mesh_storage->surface_get_index_array(p_surface);
+	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
 	RID vertex_array;
 	RenderingDevice::VertexFormatID vertex_format;
 
