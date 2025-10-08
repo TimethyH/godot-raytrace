@@ -180,6 +180,17 @@ def build_rd_header(filename: str, shader: str) -> None:
     include_file_in_rd_header(shader, header_data := RDHeaderStruct(), 0)
     class_name = os.path.basename(shader).replace(".glsl", "").title().replace("_", "").replace(".", "") + "ShaderRD"
 
+    def write_cstring_or_null(f, var_name: str, lines):
+            """Write either a static const char array or a nullptr pointer depending on lines presence."""
+            if lines:
+                f.write(f"""\t\tstatic const char {var_name}[] = {{
+    {to_raw_cstring(lines)}
+    \t\t}};
+    """)
+            else:
+                f.write(f"""\t\tstatic const char *{var_name} = nullptr;
+    """)
+
     with generated_wrapper(filename) as file:
         file.write(f"""\
 #include "servers/rendering/renderer_rd/shader_rd.h"
@@ -189,25 +200,15 @@ public:
 	{class_name}() {{
 """)
 
-        if header_data.raygen_lines:
-            file.write(f"""\
-		static const char _raygen_code[] = {{
-{to_raw_cstring(header_data.raygen_lines)}
-		}};
-		static const char _any_hit_code[] = {{
-{to_raw_cstring(header_data.any_hit_lines)}
-		}};
-		static const char _closest_hit_code[] = {{
-{to_raw_cstring(header_data.closest_hit_lines)}
-		}};
-		static const char _miss_code[] = {{
-{to_raw_cstring(header_data.miss_lines)}
-		}};
-		static const char _intersection_code[] = {{
-{to_raw_cstring(header_data.intersection_lines)}
-		}};
-		setup_raytracing(_raygen_code, _any_hit_code, _closest_hit_code, _miss_code, _intersection_code, "{class_name}");
-""")
+        if header_data.raygen_lines or header_data.any_hit_lines or header_data.closest_hit_lines or header_data.miss_lines or header_data.intersection_lines:
+            write_cstring_or_null(file, "_raygen_code", header_data.raygen_lines)
+            write_cstring_or_null(file, "_any_hit_code", header_data.any_hit_lines)
+            write_cstring_or_null(file, "_closest_hit_code", header_data.closest_hit_lines)
+            write_cstring_or_null(file, "_miss_code", header_data.miss_lines)
+            write_cstring_or_null(file, "_intersection_code", header_data.intersection_lines)
+
+            file.write(f'\t\tsetup_raytracing(_raygen_code, _any_hit_code, _closest_hit_code, _miss_code, _intersection_code, "{class_name}");\n')
+            
         elif header_data.compute_lines:
             file.write(f"""\
 		static const char *_vertex_code = nullptr;
