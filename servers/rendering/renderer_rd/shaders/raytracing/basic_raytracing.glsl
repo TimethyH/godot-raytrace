@@ -47,12 +47,12 @@ void main(){
 	vec2 d = in_uv * 2.0 - 1.0;
 
 	vec4 clip = vec4(d, 0.0, 1.0);
-	vec4 worldPos = ubo.data.inverseViewProj * clip;
-	worldPos /= worldPos.w;
+	vec4 worldDir = ubo.data.inverseViewProj * clip;
+	worldDir /= worldDir.w;
 
 	//vec4 target = vec4(d.x, d.y, 1.0, 1.0);
 	vec4 origin = vec4(ubo.data.cameraPos, 1.0);
-	vec4 direction = vec4(normalize(worldPos.xyz - ubo.data.cameraPos), 0);
+	vec4 direction = vec4(normalize(worldDir.xyz - ubo.data.cameraPos), 0);
 	float t_min = 0.001;
 	float t_max = 10000.0;
 	traceRayEXT(tlas,
