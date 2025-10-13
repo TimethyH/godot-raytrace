@@ -1681,7 +1681,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	static int first_run = 0;
 	if (first_run == 20) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
-		raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+		raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), rb_data->has_normal_roughness() ? rb_data->get_normal_roughness() : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL), RID(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
 	}
 
 	if (first_run <= 20) {
@@ -2249,8 +2250,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 
 		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
-
-		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
+		//Ref<RenderBufferDataForwardClustered> rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), rb_data->has_normal_roughness() ? rb_data->get_normal_roughness() : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL), RID(), tlasID);
 
 		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
 

@@ -1,6 +1,7 @@
 #[raygen]
 #version 460
 #extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_samplerless_texture_functions : enable
 
 #VERSION_DEFINES
 
@@ -37,10 +38,13 @@ layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
 
+layout(set = 0, binding = 3) uniform texture2D normal;
+//layout(set = 0, binding = 4, rgba32f) uniform image2D specular;
+
 #CODE : RAYTRACE
 
 void main(){
-	prd.hitValue = vec3(0.0f); //push.clear_color.xyz;
+	prd.hitValue = push.clear_color.xyz;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeEXT.xy);
@@ -68,10 +72,11 @@ void main(){
 		0
 	);
 
-	
+	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
+	vec4 normalcolor = texelFetch(normal, pixCoords, 0);
 
 	if(prd.hitValue.x != 0.0f || prd.hitValue.y != 0.0f || prd.hitValue.z != 0.0){
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue.xyz, 1.0f));
 	}
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));
