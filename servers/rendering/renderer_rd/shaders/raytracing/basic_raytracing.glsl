@@ -40,7 +40,7 @@ layout(set = 0, binding = 2) uniform ubo_t{
 #CODE : RAYTRACE
 
 void main(){
-	prd.hitValue = push.clear_color.xyz;
+	prd.hitValue = vec3(0.0f); //push.clear_color.xyz;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeEXT.xy);
@@ -68,7 +68,12 @@ void main(){
 		0
 	);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
+	
+
+	if(prd.hitValue.x != 0.0f || prd.hitValue.y != 0.0f || prd.hitValue.z != 0.0){
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
+	}
+	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));
 }
 
@@ -95,7 +100,7 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 #CODE : RAYTRACE
 
 void main() {
-	prd.hitValue = vec3(1.0, 0.0, 0.0);
+	prd.hitValue = vec3(1.0, 0.0, 1.0);
 }
 
 #[closest_hit]
@@ -121,5 +126,5 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 #CODE : RAYTRACE
 
 void main() {
-	prd.hitValue = vec3(0.0, 1.0, 0.0);
+	prd.hitValue = vec3(0.0, 1.0, 0.5);
 }

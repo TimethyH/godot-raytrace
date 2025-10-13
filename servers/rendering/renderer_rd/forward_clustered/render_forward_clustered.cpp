@@ -2217,9 +2217,31 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Raytracing");
 
 	if (tlasID != RID()) {
-		Transform3D view_matrix = p_render_data->scene_data->cam_transform.affine_inverse();
-		Projection proj_view = p_render_data->scene_data->cam_projection * Projection(view_matrix);
 
+		//	Projection correction;
+		//correction.set_depth_correction(flip_y);
+		//correction.add_jitter_offset(taa_jitter);
+		//Projection projection = correction * cam_projection;
+
+		////store camera into ubo
+		//RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix);
+		//RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix);
+		//RendererRD::MaterialStorage::store_transform(cam_transform, ubo.inv_view_matrix);
+		//RendererRD::MaterialStorage::store_transform(cam_transform.affine_inverse(), ubo.view_matrix);
+
+		//for (uint32_t v = 0; v < view_count; v++) {
+		//	projection = correction * view_projection[v];
+		//	RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix_view[v]);
+		//	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix_view[v]);
+
+		//	ubo.eye_offset[v][0] = view_eye_offset[v].x;
+		//	ubo.eye_offset[v][1] = view_eye_offset[v].y;
+		//	ubo.eye_offset[v][2] = view_eye_offset[v].z;
+		//	ubo.eye_offset[v][3] = 0.0;
+		//}
+		p_render_data->scene_data->flip_y = true;
+		Projection proj_view = p_render_data->scene_data->get_cam_projection() * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+		//p_render_data->scene_data->flip_y = false;
 		//Projection inv_proj_view = p_render_data->scene_data->get_cam_projection() * p_render_data->scene_data->get_view_projection(0);
 
 		raytracing_rd.update_buffer(proj_view.inverse(), p_render_data->scene_data->cam_transform);
