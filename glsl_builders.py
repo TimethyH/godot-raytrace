@@ -207,7 +207,7 @@ public:
             write_cstring_or_null(file, "_miss_code", header_data.miss_lines)
             write_cstring_or_null(file, "_intersection_code", header_data.intersection_lines)
 
-            file.write(f'\t\tsetup_raytracing(_raygen_code, _any_hit_code, _closest_hit_code, _miss_code, _intersection_code, "{class_name}");\n')
+            file.write(f'\t\tsetup_raytracing(_raygen_code, _closest_hit_code, _miss_code, _any_hit_code, _intersection_code, "{class_name}");\n')
             
         elif header_data.compute_lines:
             file.write(f"""\

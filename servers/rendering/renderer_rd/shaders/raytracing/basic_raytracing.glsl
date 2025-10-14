@@ -68,11 +68,7 @@ void main(){
 		0
 	);
 
-	
-
-	if(prd.hitValue.x != 0.0f || prd.hitValue.y != 0.0f || prd.hitValue.z != 0.0){
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
-	}
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));
 }

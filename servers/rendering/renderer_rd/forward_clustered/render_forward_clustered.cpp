@@ -2300,7 +2300,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_debug_sdfgi_probes(rb, color_only_framebuffer, p_render_data->scene_data->view_count, cms);
 	}
 
-	if (draw_sky || draw_sky_fog_only) {
+	/*if (draw_sky || draw_sky_fog_only) {
 		RENDER_TIMESTAMP("Render Sky");
 
 		RD::get_singleton()->draw_command_begin_label("Draw Sky");
@@ -2310,7 +2310,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_list_end();
 		RD::get_singleton()->draw_command_end_label();
-	}
+	}*/
 
 	if (use_msaa) {
 		RENDER_TIMESTAMP("Resolve MSAA");

@@ -2,7 +2,6 @@
 
 //#include "servers/rendering/storage/render_scene_data.h"
 
-#include "basic_raytrace.glsl.gen.h"
 
 #if defined(VULKAN_ENABLED)
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"

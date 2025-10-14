@@ -5780,6 +5780,7 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 		}
 	}
 
+
 	// Groups.
 	pipeline_create_info.groupCount = shader_info->vk_groups_create_info.size();
 	VkRayTracingShaderGroupCreateInfoKHR *vk_pipeline_groups = ALLOCA_ARRAY(VkRayTracingShaderGroupCreateInfoKHR, pipeline_create_info.groupCount);
@@ -5832,8 +5833,8 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 
 	// Shader binding table.
 	uint32_t raygenOffset = 0;
-	uint32_t missOffset = _align_up(raygenOffset + rpi->regions.raygen.size, base_alignment);
-	uint32_t hitOffset = _align_up(missOffset + rpi->regions.miss.size, base_alignment);
+	uint32_t hitOffset = _align_up(raygenOffset + rpi->regions.raygen.size, base_alignment);
+	uint32_t missOffset = _align_up(hitOffset + rpi->regions.miss.size, base_alignment);
 	//uint32_t callableOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
 
 	// Total SBT size
