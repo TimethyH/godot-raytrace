@@ -24,6 +24,8 @@ public:
 	void update_buffer(const Projection& p_inv_view_proj, const Transform3D& cam_pos);
 	void setup_uniform_data(RID render_targe, RID tlas);
 
+	void update_material_data(RID buffer);
+
 	~RaytraceRD();
 
 	// RenderSceneDataRD &scene_data, const RenderDataRD *p_render_data
@@ -53,11 +55,16 @@ private:
 		float clear_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 16
 	};
 
-	//RayPushConstant ray_pc;
+	// Ideally this struct holds material data which gets sent to the GPU..
+	struct MaterialData {
+		float albedo[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // 16
+		RID uniform_buffer;
+	};
 
 	struct RaytracingShader {
 		BasicRaytracingShaderRD shader;
 		ShaderCompiler compiler;
+		MaterialData material_data;
 
 		RID default_shader;
 		RID default_material;

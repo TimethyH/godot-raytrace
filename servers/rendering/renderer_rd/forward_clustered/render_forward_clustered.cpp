@@ -2300,7 +2300,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_debug_sdfgi_probes(rb, color_only_framebuffer, p_render_data->scene_data->view_count, cms);
 	}
 
-	/*if (draw_sky || draw_sky_fog_only) {
+	if (draw_sky || draw_sky_fog_only) {
 		RENDER_TIMESTAMP("Render Sky");
 
 		RD::get_singleton()->draw_command_begin_label("Draw Sky");
@@ -2310,7 +2310,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_list_end();
 		RD::get_singleton()->draw_command_end_label();
-	}*/
+	}
 
 	if (use_msaa) {
 		RENDER_TIMESTAMP("Resolve MSAA");
@@ -3881,7 +3881,7 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 			(1 << RS::ARRAY_INDEX);
 
 	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
-
+	
 	if (vertex_array.is_null()) {
 		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
 		return RID();
@@ -3927,6 +3927,9 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = geom->get_transform();
+
+		RID buffer = inst->surface_caches->material->get_uniform_buffer();
+		raytracing_rd.update_material_data(buffer);
 
 		// Build BLAS for unique meshes
 		if (!rd->has_blas(mesh_rid)) {

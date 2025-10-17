@@ -5834,11 +5834,11 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 	// Shader binding table.
 	uint32_t raygenOffset = 0;
 	uint32_t hitOffset = _align_up(raygenOffset + rpi->regions.raygen.size, base_alignment);
-	uint32_t missOffset = _align_up(hitOffset + rpi->regions.miss.size, base_alignment);
+	uint32_t missOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
 	//uint32_t callableOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
 
 	// Total SBT size
-	uint32_t sbt_size = hitOffset + rpi->regions.hit.size;
+	uint32_t sbt_size = missOffset + rpi->regions.miss.size;
 
 	// Create shader binding table buffer
 	rpi->sbt_buffer = buffer_create(
@@ -5851,8 +5851,8 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 
 	// Update regions addresses.
 	rpi->regions.raygen.deviceAddress = sbt_base_address + raygenOffset;
-	rpi->regions.miss.deviceAddress = sbt_base_address + missOffset;
 	rpi->regions.hit.deviceAddress = sbt_base_address + hitOffset;
+	rpi->regions.miss.deviceAddress = sbt_base_address + missOffset;
 	rpi->regions.call.deviceAddress = 0;
 
 	// Get shader group handles
@@ -5884,6 +5884,14 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 		++handle_index;
 	}
 
+	// Write hit handles
+	sbt_data = sbt_ptr + hitOffset;
+	for (uint32_t i = 0; i < shader_info->region_count.hit_count; ++i) {
+		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
+		sbt_data += rpi->regions.hit.stride;
+		++handle_index;
+	}
+
 	// Write miss handles
 	sbt_data = sbt_ptr + missOffset;
 	for (uint32_t i = 0; i < shader_info->region_count.miss_count; ++i) {
@@ -5892,13 +5900,6 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 		++handle_index;
 	}
 
-	// Write hit handles
-	sbt_data = sbt_ptr + hitOffset;
-	for (uint32_t i = 0; i < shader_info->region_count.hit_count; ++i) {
-		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
-		sbt_data += rpi->regions.hit.stride;
-		++handle_index;
-	}
 
 	buffer_unmap(rpi->sbt_buffer);
 

@@ -37,6 +37,10 @@ layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
 
+layout(set = 0, binding = 3) uniform albedo{
+	vec4 color;
+}material;
+
 #CODE : RAYTRACE
 
 void main(){
@@ -70,7 +74,39 @@ void main(){
 
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
 	
-	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));
+	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
+}
+
+
+#[closest_hit]
+#version 460
+#extension GL_EXT_ray_tracing : enable
+
+#VERSION_DEFINES
+
+#GLOBALS
+
+struct hitPayload
+{
+  vec3 hitValue;
+  int  depth;
+  vec3 attenuation;
+  int  done;
+  vec3 rayOrigin;
+  vec3 rayDir;
+};
+
+layout(location = 0) rayPayloadInEXT hitPayload prd;
+
+layout(set = 0, binding = 3) uniform albedo{
+	vec4 color;
+}material;
+
+
+#CODE : RAYTRACE
+
+void main() {
+	prd.hitValue = vec3(material.color);
 }
 
 #[miss]
@@ -97,30 +133,4 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 
 void main() {
 	prd.hitValue = vec3(1.0, 0.0, 1.0);
-}
-
-#[closest_hit]
-#version 460
-#extension GL_EXT_ray_tracing : enable
-
-#VERSION_DEFINES
-
-#GLOBALS
-
-struct hitPayload
-{
-  vec3 hitValue;
-  int  depth;
-  vec3 attenuation;
-  int  done;
-  vec3 rayOrigin;
-  vec3 rayDir;
-};
-
-layout(location = 0) rayPayloadInEXT hitPayload prd;
-
-#CODE : RAYTRACE
-
-void main() {
-	prd.hitValue = vec3(0.0, 1.0, 0.5);
 }

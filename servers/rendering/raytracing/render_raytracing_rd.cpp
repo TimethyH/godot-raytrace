@@ -24,7 +24,6 @@ void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_ca
 
 	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
 	update_buffer(p_inv_view_proj, p_cam_pos);
-
 	setup_uniform_data(p_render_buffer, p_tlas);
 
 	raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(raytracing_shader.default_shader_rd);
@@ -41,7 +40,7 @@ void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Transfor
 }
 
 void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
-	
+
 	Vector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -68,7 +67,20 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 		uniforms.push_back(u);
 	}
 
+	{
+		RD::Uniform u;
+		u.binding = 3;
+		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u.append_id(raytracing_shader.material_data.uniform_buffer);
+		uniforms.push_back(u);
+	}
+
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
+}
+
+void RaytraceRD::update_material_data(RID buffer) {
+
+	raytracing_shader.material_data.uniform_buffer = buffer;
 }
 
 RaytraceRD::~RaytraceRD() {
@@ -87,6 +99,7 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i
 	Vector<uint8_t> push_constant_bytes;
 	push_constant_bytes.resize(sizeof(RayPushConstant));
 	memcpy(push_constant_bytes.ptrw(), &ray_push_constant, sizeof(RayPushConstant));
+
 
 	RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
 
