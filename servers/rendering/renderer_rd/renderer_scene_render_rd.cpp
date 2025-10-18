@@ -1408,14 +1408,6 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 			render_data.instance_data_before_culling = nullptr;
 		}
 
-		render_data.instances = &scene_cull_data->geometry_instances;
-		render_data.lights = &scene_cull_data->light_instances;
-		render_data.reflection_probes = &scene_cull_data->reflections;
-		render_data.voxel_gi_instances = &scene_cull_data->voxel_gi_instances;
-		render_data.decals = &scene_cull_data->decals;
-		render_data.lightmaps = &scene_cull_data->lightmaps;
-		render_data.fog_volumes = &scene_cull_data->fog_volumes;
-		render_data.instance_data_before_culling = scene_cull_data->instance_data_before_culling;
 		render_data.environment = p_environment;
 		render_data.compositor = p_compositor;
 		render_data.camera_attributes = p_camera_attributes;
