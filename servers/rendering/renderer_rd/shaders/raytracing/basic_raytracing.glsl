@@ -37,22 +37,26 @@ layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
 
+layout(set = 0, binding = 3) uniform albedo{
+	vec4 color;
+}material;
+
 #CODE : RAYTRACE
 
 void main(){
-	prd.hitValue = push.clear_color.xyz;
+	prd.hitValue = vec3(0.0f); //push.clear_color.xyz;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeEXT.xy);
 	vec2 d = in_uv * 2.0 - 1.0;
 
 	vec4 clip = vec4(d, 0.0, 1.0);
-	vec4 worldPos = ubo.data.inverseViewProj * clip;
-	worldPos /= worldPos.w;
+	vec4 worldDir = ubo.data.inverseViewProj * clip;
+	worldDir /= worldDir.w;
 
 	//vec4 target = vec4(d.x, d.y, 1.0, 1.0);
 	vec4 origin = vec4(ubo.data.cameraPos, 1.0);
-	vec4 direction = vec4(normalize(worldPos.xyz - ubo.data.cameraPos), 0);
+	vec4 direction = vec4(normalize(worldDir.xyz - ubo.data.cameraPos), 0);
 	float t_min = 0.001;
 	float t_max = 10000.0;
 	traceRayEXT(tlas,
@@ -69,7 +73,40 @@ void main(){
 	);
 
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0f));
-	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));
+	
+	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
+}
+
+
+#[closest_hit]
+#version 460
+#extension GL_EXT_ray_tracing : enable
+
+#VERSION_DEFINES
+
+#GLOBALS
+
+struct hitPayload
+{
+  vec3 hitValue;
+  int  depth;
+  vec3 attenuation;
+  int  done;
+  vec3 rayOrigin;
+  vec3 rayDir;
+};
+
+layout(location = 0) rayPayloadInEXT hitPayload prd;
+
+layout(set = 0, binding = 3) uniform albedo{
+	vec4 color;
+}material;
+
+
+#CODE : RAYTRACE
+
+void main() {
+	prd.hitValue = vec3(material.color);
 }
 
 #[miss]
@@ -95,31 +132,5 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 #CODE : RAYTRACE
 
 void main() {
-	prd.hitValue = vec3(1.0, 0.0, 0.0);
-}
-
-#[closest_hit]
-#version 460
-#extension GL_EXT_ray_tracing : enable
-
-#VERSION_DEFINES
-
-#GLOBALS
-
-struct hitPayload
-{
-  vec3 hitValue;
-  int  depth;
-  vec3 attenuation;
-  int  done;
-  vec3 rayOrigin;
-  vec3 rayDir;
-};
-
-layout(location = 0) rayPayloadInEXT hitPayload prd;
-
-#CODE : RAYTRACE
-
-void main() {
-	prd.hitValue = vec3(0.0, 1.0, 0.0);
+	prd.hitValue = vec3(1.0, 0.0, 1.0);
 }

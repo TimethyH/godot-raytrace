@@ -5780,6 +5780,7 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 		}
 	}
 
+
 	// Groups.
 	pipeline_create_info.groupCount = shader_info->vk_groups_create_info.size();
 	VkRayTracingShaderGroupCreateInfoKHR *vk_pipeline_groups = ALLOCA_ARRAY(VkRayTracingShaderGroupCreateInfoKHR, pipeline_create_info.groupCount);
@@ -5817,61 +5818,88 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 	uint32_t handle_size_aligned = raytracing_capabilities.shader_group_handle_size_aligned;
 	uint32_t base_alignment = raytracing_capabilities.shader_group_base_alignment;
 
-	rpi->regions.raygen.stride = _align_up(handle_size_aligned * shader_info->region_count.raygen_count, base_alignment);
-	rpi->regions.raygen.size = rpi->regions.raygen.stride; // odd but ok.
-
-	rpi->regions.hit.stride = handle_size_aligned;
-	rpi->regions.hit.size = _align_up(handle_size_aligned * shader_info->region_count.hit_count, base_alignment);
+	// Set up region strides and sizes
+	rpi->regions.raygen.stride = handle_size_aligned; // Raygen stride is just the handle size
+	rpi->regions.raygen.size = _align_up(handle_size_aligned * shader_info->region_count.raygen_count, base_alignment);
 
 	rpi->regions.miss.stride = handle_size_aligned;
 	rpi->regions.miss.size = _align_up(handle_size_aligned * shader_info->region_count.miss_count, base_alignment);
+
+	rpi->regions.hit.stride = handle_size_aligned;
+	rpi->regions.hit.size = _align_up(handle_size_aligned * shader_info->region_count.hit_count, base_alignment);
 
 	rpi->regions.call.stride = 0;
 	rpi->regions.call.size = 0;
 
 	// Shader binding table.
-	uint32_t sbt_size = rpi->regions.raygen.size + rpi->regions.hit.size + rpi->regions.miss.size + rpi->regions.call.size;
-	rpi->sbt_buffer = buffer_create(sbt_size, BUFFER_USAGE_TRANSFER_FROM_BIT | BUFFER_USAGE_DEVICE_ADDRESS_BIT | BUFFER_USAGE_SHADER_BINDING_TABLE_BIT, MEMORY_ALLOCATION_TYPE_CPU);
+	uint32_t raygenOffset = 0;
+	uint32_t hitOffset = _align_up(raygenOffset + rpi->regions.raygen.size, base_alignment);
+	uint32_t missOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
+	//uint32_t callableOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
+
+	// Total SBT size
+	uint32_t sbt_size = missOffset + rpi->regions.miss.size;
+
+	// Create shader binding table buffer
+	rpi->sbt_buffer = buffer_create(
+			sbt_size,
+			BUFFER_USAGE_TRANSFER_FROM_BIT | BUFFER_USAGE_DEVICE_ADDRESS_BIT | BUFFER_USAGE_SHADER_BINDING_TABLE_BIT,
+			MEMORY_ALLOCATION_TYPE_CPU);
+
+	// Get base device address
+	VkDeviceAddress sbt_base_address = buffer_get_device_address(rpi->sbt_buffer);
 
 	// Update regions addresses.
-	rpi->regions.raygen.deviceAddress = buffer_get_device_address(rpi->sbt_buffer);
-	rpi->regions.hit.deviceAddress = rpi->regions.raygen.deviceAddress + rpi->regions.raygen.size;
-	rpi->regions.miss.deviceAddress = rpi->regions.hit.deviceAddress + rpi->regions.hit.size;
+	rpi->regions.raygen.deviceAddress = sbt_base_address + raygenOffset;
+	rpi->regions.hit.deviceAddress = sbt_base_address + hitOffset;
+	rpi->regions.miss.deviceAddress = sbt_base_address + missOffset;
 	rpi->regions.call.deviceAddress = 0;
 
-	// Update shader binding table buffer.
+	// Get shader group handles
 	uint32_t handle_size = raytracing_capabilities.shader_group_handle_size;
 	uint32_t handles_size = shader_info->region_count.group_count * handle_size;
 	LocalVector<uint8_t> handles_data;
 	handles_data.resize(handles_size);
 	uint8_t *handles_ptr = handles_data.ptr();
 
-	VkResult err = vkGetRayTracingShaderGroupHandlesKHR(vk_device, rpi->vk_pipeline, 0, shader_info->region_count.group_count, handles_size, handles_ptr);
+	VkResult err = vkGetRayTracingShaderGroupHandlesKHR(
+			vk_device,
+			rpi->vk_pipeline,
+			0,
+			shader_info->region_count.group_count,
+			handles_size,
+			handles_ptr);
 	ERR_FAIL_COND_V_MSG(err, err, "vkGetRayTracingShaderGroupHandlesKHR failed with error " + itos(err) + ".");
 
+	// Map SBT buffer and write handles
 	uint8_t *sbt_ptr = buffer_map(rpi->sbt_buffer);
-	uint8_t *sbt_data = sbt_ptr;
+	uint8_t *sbt_data = nullptr;
 	uint32_t handle_index = 0;
 
-	// Raygen.
-	memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
-	++handle_index;
+	// Write raygen handles
+	sbt_data = sbt_ptr + raygenOffset;
+	for (uint32_t i = 0; i < shader_info->region_count.raygen_count; ++i) {
+		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
+		sbt_data += rpi->regions.raygen.stride;
+		++handle_index;
+	}
 
-	// Hit.
-	sbt_data = sbt_ptr + rpi->regions.raygen.size;
+	// Write hit handles
+	sbt_data = sbt_ptr + hitOffset;
 	for (uint32_t i = 0; i < shader_info->region_count.hit_count; ++i) {
 		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
 		sbt_data += rpi->regions.hit.stride;
 		++handle_index;
 	}
 
-	// Miss.
-	sbt_data = sbt_ptr + rpi->regions.raygen.size + rpi->regions.hit.size;
+	// Write miss handles
+	sbt_data = sbt_ptr + missOffset;
 	for (uint32_t i = 0; i < shader_info->region_count.miss_count; ++i) {
 		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
 		sbt_data += rpi->regions.miss.stride;
 		++handle_index;
 	}
+
 
 	buffer_unmap(rpi->sbt_buffer);
 
