@@ -3836,37 +3836,49 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
-RID RenderForwardClustered::surface_create_blas(void *p_surface) {
+LocalVector<RID> RenderForwardClustered::create_surface_blases(void *p_surface, uint32_t p_lod) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	GeometryInstanceSurfaceDataCache *surf = reinterpret_cast<GeometryInstanceSurfaceDataCache *>(p_surface);
 
-	if (surf == nullptr) {
-		return RID();
+	LocalVector<RID> new_blases;
+
+	while (surf != nullptr) {
+		/*if (!(surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE) || surf->primitive != RS::PrimitiveType::PRIMITIVE_TRIANGLES || (surf->flags & GeometryInstanceSurfaceDataCache::)) {
+			surf = surf->next;
+			continue;
+		}*/
+
+		RID index_array = mesh_storage->mesh_surface_get_index_array(surf->surface, p_lod);
+		RID vertex_array;
+		RenderingDevice::VertexFormatID vertex_format;
+
+		// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
+		uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
+				(1 << RS::ARRAY_NORMAL) |
+				(1 << RS::ARRAY_INDEX);
+
+		mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
+
+		if (vertex_array.is_null()) {
+			ERR_PRINT("No valid triangle surfaces found for BLAS creation");
+			return new_blases;
+		}
+
+		// For now, create BLAS with first surface (multi-surface BLAS is more complex)
+		BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+		RID blas = RD::get_singleton()->blas_create(
+				vertex_array,
+				index_array,
+				geometry_bits);
+
+		new_blases.push_back(blas);
+
+		//surf = surf->next;
+		break;
 	}
 
-	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
-	RID vertex_array;
-	RenderingDevice::VertexFormatID vertex_format;
-
-	// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
-	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
-			(1 << RS::ARRAY_NORMAL) |
-			(1 << RS::ARRAY_INDEX);
-
-	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
-
-	if (vertex_array.is_null()) {
-		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
-		return RID();
-	}
-
-	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
-	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
-
-	return RD::get_singleton()->blas_create(
-			vertex_array,
-			index_array,
-			geometry_bits);
+	return new_blases;
 }
 
 void RenderForwardClustered::build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type) {
@@ -3877,14 +3889,19 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 
 	LocalVector<RID> local_blases;
 	LocalVector<Transform3D> transforms;
-
 	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
+
 	// Iterate ALL instances in the scenario
 	for (uint64_t i = 0; i < instance_data.size(); i++) {
 		RendererSceneCull::InstanceData &idata = instance_data[i];
 
+		if (idata.flags & RendererSceneCull::InstanceData::FLAG_USES_MESH_INSTANCE) {
+			continue;
+		}
+
 		// Check if it's geometry
 		uint32_t base_type = idata.flags & RendererSceneCull::InstanceData::FLAG_BASE_TYPE_MASK;
+
 		if (!((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK)) {
 			continue; // Skip non-geometry (lights, probes, etc.)
 		}
@@ -3901,17 +3918,50 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = geom->get_transform();
 
+		/*if (inst->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) {
+			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+			mesh_rid = mesh_storage->multimesh_get_mesh(inst->data->base);
+			const int multimesh_instance_count = mesh_storage->multimesh_get_instance_count(inst->data->base);
+
+			RID new_blas;
+
+			if (!rd->has_blas(mesh_rid)) {
+				new_blas = surface_create_blas(inst->surface_caches);
+			} else {
+				new_blas = rd->blas_get_or_null(mesh_rid);
+			}
+
+			for (int j = 0; j < multimesh_instance_count; ++j) {
+				Transform3D multimesh_instance_transform = mesh_storage->multimesh_instance_get_transform(inst->data->base, j);
+				const int surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
+			}
+		}*/
+
 		// Build BLAS for unique meshes
-		if (!rd->has_blas(mesh_rid)) {
-			RID new_blas = surface_create_blas(inst->surface_caches);
-			local_blases.push_back(new_blas);
-			rd->blas_add_to_map(mesh_rid, new_blas);
-			transforms.push_back(world_transform);
+		if (!rd->has_mesh(mesh_rid)) {
+			LocalVector<RID> new_blases = create_surface_blases(inst->surface_caches, surface_get_lod_level(p_render_data, inst));
+
+			if (new_blases.size() > 0) {
+				rd->blases_add_to_map(mesh_rid, new_blases);
+			}
+
+			// blas & transform vectors need to be of equal length for the driver
+			for (uint64_t j = 0; j < new_blases.size(); ++j) {
+				local_blases.push_back(new_blases[j]);
+				transforms.push_back(world_transform);
+			}
+
 		} else {
-			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
-			local_blases.push_back(new_blas);
-			transforms.push_back(world_transform);
+			LocalVector<RID> new_blases = rd->blases_get_or_null(mesh_rid); // No check needed because of if-statement
+
+			// blas & transform vectors need to be of equal length for the driver
+			for (uint64_t j = 0; j < new_blases.size(); ++j) {
+				local_blases.push_back(new_blases[j]);
+				transforms.push_back(world_transform);
+			}
 		}
+
+		//break;
 	}
 
 	// Maybe error message?
@@ -3936,6 +3986,32 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 
 	tlas = rd->tlas_create(tlas_instances_buffer);
 	rd->acceleration_structure_build(tlas);
+}
+
+// Derived from: RenderForwardClustered::_fill_render_list()
+uint32_t RendererSceneRenderImplementation::RenderForwardClustered::surface_get_lod_level(RenderDataRD *p_render_data, GeometryInstanceForwardClustered *p_inst) {
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	GeometryInstanceSurfaceDataCache *surf = p_inst->surface_caches;
+	float lod_distance = 0.0;
+
+	if (p_render_data->scene_data->cam_orthogonal) {
+		lod_distance = 1.0;
+	} else {
+		Vector3 aabb_min = p_inst->transformed_aabb.position;
+		Vector3 aabb_max = p_inst->transformed_aabb.position + p_inst->transformed_aabb.size;
+		Vector3 camera_position = p_render_data->scene_data->main_cam_transform.origin;
+		Vector3 surface_distance = Vector3(0.0, 0.0, 0.0).max(aabb_min - camera_position).max(camera_position - aabb_max);
+
+		lod_distance = surface_distance.length();
+	}
+
+	// LOD
+	if (p_render_data->scene_data->screen_mesh_lod_threshold > 0.0 && mesh_storage->mesh_surface_has_lod(surf->surface)) {
+		uint32_t index_count = 0;
+		return mesh_storage->mesh_surface_get_lod(surf->surface, p_inst->lod_model_scale * p_inst->lod_bias, lod_distance * p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, index_count);
+	} else {
+		return 0;
+	}
 }
 
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {

@@ -802,8 +802,9 @@ public:
 		RID render_target;
 	};
 
-	RID surface_create_blas(void *p_surface);
+	LocalVector<RID> create_surface_blases(void *p_surface, uint32_t p_lod);
 	void build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type);
+	uint32_t surface_get_lod_level(RenderDataRD *p_render_data, GeometryInstanceForwardClustered *p_inst);
 
 private:
 	// 128 is the max size of a push constant.
