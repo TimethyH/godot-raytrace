@@ -26,6 +26,7 @@ void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_ca
 	update_buffer(p_inv_view_proj, p_cam_pos);
 	setup_uniform_data(p_render_buffer, p_tlas);
 
+
 	raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(raytracing_shader.default_shader_rd);
 }
 
@@ -70,17 +71,34 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 	{
 		RD::Uniform u;
 		u.binding = 3;
-		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u.append_id(raytracing_shader.material_data.uniform_buffer);
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(material_buffer);
 		uniforms.push_back(u);
 	}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
 
-void RaytraceRD::update_material_data(RID buffer) {
+void RaytraceRD::set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& index) {
+	if (!material_index.has(p_material)) {
+		MaterialData mat_data;
 
-	raytracing_shader.material_data.uniform_buffer = buffer;
+		Color albedo = p_material_storage->material_get_param(p_material, "albedo");
+		mat_data.albedo[0] = albedo.r;
+		mat_data.albedo[1] = albedo.g;
+		mat_data.albedo[2] = albedo.b;
+		mat_data.albedo[3] = albedo.a;
+
+		materials.push_back(mat_data);
+		material_index[p_material] = index++;
+	}
+}
+
+void RaytraceRD::upload_material_data() {
+	material_buffer = RD::get_singleton()->storage_buffer_create(
+			materials.size() * sizeof(MaterialData));
+
+	RD::get_singleton()->buffer_update(material_buffer, 0, materials.size() * sizeof(MaterialData), materials.ptr());
 }
 
 RaytraceRD::~RaytraceRD() {

@@ -37,8 +37,8 @@ layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
 
-layout(set = 0, binding = 3) uniform albedo{
-	vec4 color;
+layout(set = 0, binding = 3) buffer albedo{
+	vec4 color[];
 }material;
 
 #CODE : RAYTRACE
@@ -98,15 +98,16 @@ struct hitPayload
 
 layout(location = 0) rayPayloadInEXT hitPayload prd;
 
-layout(set = 0, binding = 3) uniform albedo{
-	vec4 color;
+layout(set = 0, binding = 3) buffer albedo{
+	vec4 color[];
 }material;
 
 
 #CODE : RAYTRACE
 
 void main() {
-	prd.hitValue = vec3(material.color);
+	vec4 albedo = material.color[gl_InstanceCustomIndexEXT];
+	prd.hitValue = vec3(albedo);
 }
 
 #[miss]
