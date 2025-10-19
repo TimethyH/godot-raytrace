@@ -1,6 +1,7 @@
 #[raygen]
 #version 460
 #extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_nonuniform_qualifier : enable 
 
 #VERSION_DEFINES
 
@@ -14,6 +15,14 @@ struct hitPayload
   int  done;
   vec3 rayOrigin;
   vec3 rayDir;
+};
+
+struct MaterialData {
+	vec4 color;
+	uint albedo_texture_index;
+	uint dummy;
+	uint dummy2;
+	uint dummy3;
 };
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
@@ -37,9 +46,11 @@ layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
 
-layout(set = 0, binding = 3) buffer albedo{
-	vec4 color[];
+layout(set = 0, binding = 3) buffer MaterialBuffer{
+	MaterialData materials[];
 }material;
+
+layout(set = 0, binding = 4) uniform sampler2D albedo_texture;
 
 #CODE : RAYTRACE
 
@@ -81,6 +92,7 @@ void main(){
 #[closest_hit]
 #version 460
 #extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_nonuniform_qualifier : enable 
 
 #VERSION_DEFINES
 
@@ -96,18 +108,42 @@ struct hitPayload
   vec3 rayDir;
 };
 
+struct MaterialData {
+	vec4 color;
+	uint albedo_texture_index;
+	uint dummy;
+	uint dummy2;
+	uint dummy3;
+};
+
 layout(location = 0) rayPayloadInEXT hitPayload prd;
 
-layout(set = 0, binding = 3) buffer albedo{
-	vec4 color[];
+layout(set = 0, binding = 3) buffer MaterialBuffer{
+	MaterialData materials[];
 }material;
+
+layout(set = 0, binding = 4) uniform sampler2D albedo_texture;
 
 
 #CODE : RAYTRACE
 
 void main() {
-	vec4 albedo = material.color[gl_InstanceCustomIndexEXT];
-	prd.hitValue = vec3(albedo);
+	uint mat_index = gl_InstanceCustomIndexEXT;
+    MaterialData mat = material.materials[mat_index];
+    
+    vec3 albedo = mat.color.rgb;
+    
+    // Check if material has albedo texture
+    if (mat.albedo_texture_index > 0) {
+        vec2 uv = vec2(0.1,0.1);
+        
+        // Sample texture and multiply with base color
+        vec3 tex_color = texture(albedo_texture, uv).rgb;
+        albedo = tex_color;
+    }
+    
+    prd.hitValue = albedo;
+    //prd.hitValue = vec3(1.0f,0.0f,0.0f);
 }
 
 #[miss]

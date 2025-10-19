@@ -59,6 +59,10 @@ private:
 	// Ideally this struct holds material data which gets sent to the GPU..
 	struct MaterialData {
 		float albedo[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // 16
+		uint32_t albedo_texture_index = 0;
+		uint32_t dummy;
+		uint32_t dummy2;
+		uint32_t dummy3; // 4x4 = 16
 	};
 
 	struct RaytracingShader {
@@ -76,7 +80,12 @@ private:
 	RID raytrace_pipeline;
 
 	LocalVector<MaterialData> materials;
-	HashMap<RID, uint32_t> material_index;
+	LocalVector<RID> textures;
+	HashMap<RID, uint32_t> material_to_index;
+	HashMap<RID, uint32_t> texture_to_index;
+	uint32_t texture_id = 1;
 	RID material_buffer;
+
+	bool default_texture_set = false;
 };
 } //namespace RendererRD
