@@ -38,7 +38,6 @@ void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Transfor
 }
 
 void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
-
 	// TODO this function gets called in the init and when creating the pipeline. We should pick 1 and call it once.
 	Vector<RD::Uniform> uniforms;
 	{
@@ -86,18 +85,17 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 		RD::Uniform u;
 		u.binding = 4;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-		if (!textures[1].is_valid()) {
-			print_error("Invalid texture!");
-			TextureStorage *ts = TextureStorage::get_singleton();
-			RID fallback = ts->texture_rd_get_default(
-					TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
-			u.append_id(sampler);
-			u.append_id(fallback);
-		} else {
-			u.append_id(sampler);
-			u.append_id(textures[1]);
+		for (const RID &tex : textures) {
+			if (!tex.is_valid()) {
+				print_error("Invalid texture!");
+				u.append_id(sampler);
+				u.append_id(textures[0]); // default white
+			} else {
+				u.append_id(sampler);
+				u.append_id(tex);
+			}
 		}
-		uniforms.push_back(u);
+			uniforms.push_back(u);
 	}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0

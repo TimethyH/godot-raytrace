@@ -50,7 +50,7 @@ layout(set = 0, binding = 3) buffer MaterialBuffer{
 	MaterialData materials[];
 }material;
 
-layout(set = 0, binding = 4) uniform sampler2D albedo_texture;
+layout(set = 0, binding = 4) uniform sampler2D albedo_texture[2];
 
 #CODE : RAYTRACE
 
@@ -92,7 +92,8 @@ void main(){
 #[closest_hit]
 #version 460
 #extension GL_EXT_ray_tracing : enable
-#extension GL_EXT_nonuniform_qualifier : enable 
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_descriptor_indexing : enable
 
 #VERSION_DEFINES
 
@@ -122,7 +123,7 @@ layout(set = 0, binding = 3) buffer MaterialBuffer{
 	MaterialData materials[];
 }material;
 
-layout(set = 0, binding = 4) uniform sampler2D albedo_texture;
+layout(set = 0, binding = 4) uniform sampler2D albedo_texture[2];
 
 
 #CODE : RAYTRACE
@@ -138,7 +139,7 @@ void main() {
         vec2 uv = vec2(0.1,0.1);
         
         // Sample texture and multiply with base color
-        vec3 tex_color = texture(albedo_texture, uv).rgb;
+        vec3 tex_color = texture(albedo_texture[1], uv).rgb;
         albedo = tex_color;
     }
     

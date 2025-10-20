@@ -554,6 +554,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, false); // WIP
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
@@ -791,6 +792,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
+		VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptor_indexing_features = {}; // WIP
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
@@ -873,6 +875,12 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			sync_2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
 			sync_2_features.pNext = next_features;
 			next_features = &sync_2_features;
+		}
+		// WIP
+		if (enabled_device_extension_names.has(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+			descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+			descriptor_indexing_features.pNext = next_features;
+			next_features = &descriptor_indexing_features;
 		}
 
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
@@ -959,6 +967,20 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			raytracing_capabilities.raytracing_pipeline_support = raytracing_pipeline_features.rayTracingPipeline;
 			raytracing_capabilities.validation = raytracing_validation_features.rayTracingValidation;
 		}
+		// WIP
+		if (enabled_device_extension_names.has(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+			descriptor_indexing_capabilities.descriptor_indexing_support = true;
+			descriptor_indexing_capabilities.runtime_descriptor_array =
+					descriptor_indexing_features.runtimeDescriptorArray;
+			descriptor_indexing_capabilities.descriptor_binding_variable_descriptor_count =
+					descriptor_indexing_features.descriptorBindingVariableDescriptorCount;
+			descriptor_indexing_capabilities.shader_sampled_image_array_non_uniform_indexing =
+					descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing;
+			descriptor_indexing_capabilities.descriptor_binding_partially_bound =
+					descriptor_indexing_features.descriptorBindingPartiallyBound;
+			descriptor_indexing_capabilities.descriptor_binding_update_unused_while_pending =
+					descriptor_indexing_features.descriptorBindingUpdateUnusedWhilePending;
+		}
 	}
 
 	if (functions.GetPhysicalDeviceProperties2 != nullptr) {
@@ -971,6 +993,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceAccelerationStructurePropertiesKHR acceleration_structure_properties = {};
 		VkPhysicalDeviceRayTracingPipelinePropertiesKHR raytracing_properties = {};
 		VkPhysicalDeviceProperties2 physical_device_properties_2 = {};
+		VkPhysicalDeviceDescriptorIndexingPropertiesEXT descriptor_indexing_properties = {}; // WIP
 
 		const bool use_1_1_properties = physical_device_properties.apiVersion >= VK_API_VERSION_1_1;
 		if (use_1_1_properties) {
@@ -1015,6 +1038,14 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			raytracing_properties.pNext = next_properties;
 			next_properties = &raytracing_properties;
 		}
+		// WIP
+		if (descriptor_indexing_capabilities.descriptor_indexing_support) {
+			descriptor_indexing_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT;
+			descriptor_indexing_properties.pNext = next_properties;
+			next_properties = &descriptor_indexing_properties;
+
+			
+		}
 
 		physical_device_properties_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		physical_device_properties_2.pNext = next_properties;
@@ -1034,6 +1065,20 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		if (subgroup_capabilities.size_control_is_supported && (subgroup_size_control_properties.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT)) {
 			subgroup_capabilities.min_size = subgroup_size_control_properties.minSubgroupSize;
 			subgroup_capabilities.max_size = subgroup_size_control_properties.maxSubgroupSize;
+		}
+
+		// WIP
+		if (descriptor_indexing_capabilities.descriptor_indexing_support) {
+			descriptor_indexing_capabilities.max_update_after_bind_descriptors_in_all_pools =
+					descriptor_indexing_properties.maxUpdateAfterBindDescriptorsInAllPools;
+			descriptor_indexing_capabilities.max_per_stage_descriptor_update_after_bind_samplers =
+					descriptor_indexing_properties.maxPerStageDescriptorUpdateAfterBindSamplers;
+			descriptor_indexing_capabilities.max_per_stage_descriptor_update_after_bind_sampled_images =
+					descriptor_indexing_properties.maxPerStageDescriptorUpdateAfterBindSampledImages;
+			descriptor_indexing_capabilities.max_descriptor_set_update_after_bind_samplers =
+					descriptor_indexing_properties.maxDescriptorSetUpdateAfterBindSamplers;
+			descriptor_indexing_capabilities.max_descriptor_set_update_after_bind_sampled_images =
+					descriptor_indexing_properties.maxDescriptorSetUpdateAfterBindSampledImages;
 		}
 
 		if (fsr_capabilities.pipeline_supported || fsr_capabilities.primitive_supported || fsr_capabilities.attachment_supported) {
@@ -5780,7 +5825,6 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 		}
 	}
 
-
 	// Groups.
 	pipeline_create_info.groupCount = shader_info->vk_groups_create_info.size();
 	VkRayTracingShaderGroupCreateInfoKHR *vk_pipeline_groups = ALLOCA_ARRAY(VkRayTracingShaderGroupCreateInfoKHR, pipeline_create_info.groupCount);
@@ -5899,7 +5943,6 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 		sbt_data += rpi->regions.miss.stride;
 		++handle_index;
 	}
-
 
 	buffer_unmap(rpi->sbt_buffer);
 

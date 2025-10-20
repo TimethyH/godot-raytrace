@@ -105,6 +105,21 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 		uint32_t shader_group_base_alignment = 0;
 		bool validation = false;
 	};
+	// WIP
+	struct DescriptorIndexingCapabilities {
+		bool descriptor_indexing_support = false;
+		bool runtime_descriptor_array = false;
+		bool descriptor_binding_variable_descriptor_count = false;
+		bool shader_sampled_image_array_non_uniform_indexing = false;
+		bool descriptor_binding_partially_bound = false;
+		bool descriptor_binding_update_unused_while_pending = false;
+
+		uint32_t max_update_after_bind_descriptors_in_all_pools = 0;
+		uint32_t max_per_stage_descriptor_update_after_bind_samplers = 0;
+		uint32_t max_per_stage_descriptor_update_after_bind_sampled_images = 0;
+		uint32_t max_descriptor_set_update_after_bind_samplers = 0;
+		uint32_t max_descriptor_set_update_after_bind_sampled_images = 0;
+	};
 
 	struct DeviceFunctions {
 		PFN_vkCreateSwapchainKHR CreateSwapchainKHR = nullptr;
@@ -153,6 +168,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	RenderingShaderContainerFormatVulkan shader_container_format;
 	AccelerationStructureCapabilities acceleration_structure_capabilities;
 	RayTracingCapabilities raytracing_capabilities;
+	DescriptorIndexingCapabilities descriptor_indexing_capabilities;
 	bool buffer_device_address_support = false;
 	bool vulkan_memory_model_support = false;
 	bool vulkan_memory_model_device_scope_support = false;
