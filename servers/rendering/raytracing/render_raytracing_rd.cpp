@@ -67,13 +67,13 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 		uniforms.push_back(u);
 	}
 
-	{
-		RD::Uniform u;
-		u.binding = 3;
-		u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u.append_id(raytracing_shader.material_data.uniform_buffer);
-		uniforms.push_back(u);
-	}
+	//{
+	//	RD::Uniform u;
+	//	u.binding = 3;
+	//	u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+	//	u.append_id(raytracing_shader.material_data.uniform_buffer);
+	//	uniforms.push_back(u);
+	//}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }

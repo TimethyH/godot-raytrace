@@ -659,7 +659,7 @@ public:
 	void framebuffer_set_invalidation_callback(RID p_framebuffer, InvalidationCallback p_callback, void *p_userdata);
 
 	FramebufferFormatID framebuffer_get_format(RID p_framebuffer);
-	Size2 framebuffer_get_size(RID p_framebuffer);
+	Size2 framebuffer_get_size(RID p_framebuffer);	
 
 	/*****************/
 	/**** SAMPLER ****/
@@ -1254,7 +1254,10 @@ private:
 
 	RID_Owner<InstancesBuffer, true> instances_buffer_owner;
 	RID_Owner<AccelerationStructure> acceleration_structure_owner;
-	AHashMap<RID, LocalVector<RID>> mesh_blases_map;
+
+	// A mesh can have multiple LoDs, which can have multiple surfaces, hence why vector<vector<RID>>.
+	// The order is: Mesh<LoDs<Surface BLASes>>
+	AHashMap<RID, LocalVector<LocalVector<RID>>> mesh_blases_map;
 
 public:
 	enum AccelerationStructureGeometryType {
@@ -1273,10 +1276,10 @@ public:
 	};
 
 	bool has_mesh(RID p_mesh_rid);
-	void blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases);
+	void blases_add_to_map(RID p_mesh_rid, LocalVector<LocalVector<RID>> &p_blases);
 	LocalVector<RID> &get_type_blases(AccelerationStructureGeometryType p_type);
 	RID &tlas_get_type(AccelerationStructureGeometryType p_type);
-	LocalVector<RID> blases_get_or_null(RID p_mesh_rid);
+	LocalVector<RID> blases_get_or_null(RID p_mesh_rid, uint32_t p_lod);
 	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
 	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
 	void tlas_instances_buffer_fill(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);

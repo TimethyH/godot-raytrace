@@ -801,7 +801,7 @@ public:
 		RID render_target;
 	};
 
-	LocalVector<RID> create_surface_blases(void *p_surface, uint32_t p_lod);
+	LocalVector<LocalVector<RID>> create_surface_blases(void *p_surface);
 	void build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type);
 	uint32_t surface_get_lod_level(RenderDataRD *p_render_data, GeometryInstanceForwardClustered *p_inst);
 

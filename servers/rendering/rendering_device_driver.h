@@ -180,7 +180,7 @@ public:
 
 	virtual BufferID buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type) = 0;
 	// Only for a buffer with BUFFER_USAGE_TEXEL_BIT.
-	virtual bool buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) = 0;
+	virtual bool buffer_set_texel_format(BufferID p_buffer, DataFormat p_format, uint64_t p_size) = 0;
 	virtual void buffer_free(BufferID p_buffer) = 0;
 	virtual uint64_t buffer_get_allocation_size(BufferID p_buffer) = 0;
 	virtual uint8_t *buffer_map(BufferID p_buffer) = 0;

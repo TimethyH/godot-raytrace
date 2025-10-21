@@ -879,7 +879,7 @@ RDD::BufferID RenderingDeviceDriverD3D12::buffer_create(uint64_t p_size, BitFiel
 	return BufferID(buf_info);
 }
 
-bool RenderingDeviceDriverD3D12::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
+bool RenderingDeviceDriverD3D12::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format, uint64_t p_size) {
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
 	buf_info->texel_format = p_format;
 	return true;

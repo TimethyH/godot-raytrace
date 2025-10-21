@@ -247,7 +247,7 @@ private:
 
 public:
 	virtual BufferID buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type) override final;
-	virtual bool buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) override final;
+	virtual bool buffer_set_texel_format(BufferID p_buffer, DataFormat p_format, uint64_t p_size) override final;
 	virtual void buffer_free(BufferID p_buffer) override final;
 	virtual uint64_t buffer_get_allocation_size(BufferID p_buffer) override final;
 	virtual uint8_t *buffer_map(BufferID p_buffer) override final;

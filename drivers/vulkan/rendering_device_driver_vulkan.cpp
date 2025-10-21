@@ -1848,7 +1848,7 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	return BufferID(buf_info);
 }
 
-bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
+bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format, uint64_t p_size) {
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
 
 	DEV_ASSERT(!buf_info->vk_view);
@@ -1857,7 +1857,7 @@ bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, Dat
 	view_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
 	view_create_info.buffer = buf_info->vk_buffer;
 	view_create_info.format = RD_TO_VK_FORMAT[p_format];
-	view_create_info.range = buf_info->allocation.size;
+	view_create_info.range = p_size;
 
 	VkResult res = vkCreateBufferView(vk_device, &view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW), &buf_info->vk_view);
 	ERR_FAIL_COND_V_MSG(res, false, "Unable to create buffer view, error " + itos(res) + ".");
@@ -5820,7 +5820,7 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 
 	// Set up region strides and sizes
 	rpi->regions.raygen.stride = handle_size_aligned; // Raygen stride is just the handle size
-	rpi->regions.raygen.size = _align_up(handle_size_aligned * shader_info->region_count.raygen_count, base_alignment);
+	rpi->regions.raygen.size = handle_size_aligned;
 
 	rpi->regions.miss.stride = handle_size_aligned;
 	rpi->regions.miss.size = _align_up(handle_size_aligned * shader_info->region_count.miss_count, base_alignment);

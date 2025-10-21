@@ -250,7 +250,7 @@ bool RenderingDevice::has_mesh(RID p_mesh_rid) {
 	return mesh_blases_map.has(p_mesh_rid);
 }
 
-void RenderingDevice::blases_add_to_map(RID p_mesh_rid, LocalVector<RID> &p_blases) {
+void RenderingDevice::blases_add_to_map(RID p_mesh_rid, LocalVector<LocalVector<RID>> &p_blases) {
 	if (mesh_blases_map.has(p_mesh_rid)) {
 		WARN_PRINT("This mesh id already contained blases and so the old ones are overwritten");
 	}
@@ -273,9 +273,11 @@ RID &RenderingDevice::tlas_get_type(AccelerationStructureGeometryType p_type) {
 	}
 }
 
-LocalVector<RID> RenderingDevice::blases_get_or_null(RID p_mesh_rid) {
+LocalVector<RID> RenderingDevice::blases_get_or_null(RID p_mesh_rid, uint32_t p_lod) {
+	ERR_FAIL_COND_V_MSG(mesh_blases_map[p_mesh_rid].size() <= p_lod, LocalVector<RID>(), "Given LOD is not available");
+
 	if (mesh_blases_map.has(p_mesh_rid)) {
-		return mesh_blases_map[p_mesh_rid];
+		return mesh_blases_map[p_mesh_rid][p_lod];
 	} else {
 		return LocalVector<RID>();
 	}
@@ -999,7 +1001,7 @@ RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat 
 		texture_buffer.draw_tracker->buffer_driver_id = texture_buffer.driver_id;
 	}
 
-	bool ok = driver->buffer_set_texel_format(texture_buffer.driver_id, p_format);
+	bool ok = driver->buffer_set_texel_format(texture_buffer.driver_id, p_format, size_bytes);
 	if (!ok) {
 		driver->buffer_free(texture_buffer.driver_id);
 		ERR_FAIL_V(RID());
@@ -3565,7 +3567,8 @@ RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader
 RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers) {
 	_THREAD_SAFE_METHOD_
 
-	Ref<RenderingShaderContainer> shader_container = driver->get_shader_container_format().create_container();
+	const RenderingShaderContainerFormat &shader_container_format = driver->get_shader_container_format();
+	Ref<RenderingShaderContainer> shader_container = shader_container_format.create_container();
 	ERR_FAIL_COND_V(shader_container.is_null(), RID());
 
 	bool parsed_container = shader_container->from_bytes(p_shader_binary);
