@@ -1813,6 +1813,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::MaterialStorage::Samplers samplers;
 
 	PassMode depth_pass_mode = PASS_MODE_DEPTH;
+
+#ifdef RAYTRACING_TEST
+	depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
+#endif
+ 
+	
 	uint32_t color_pass_flags = 0;
 	Vector<Color> depth_pass_clear;
 	bool using_separate_specular = false;
