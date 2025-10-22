@@ -816,7 +816,8 @@ private:
 	BasicRaytraceRD raytracing_shader;
 
 	RendererRD::RaytraceRD raytracing_rd;
- public:
+
+public:
 	static RenderForwardClustered *get_singleton() { return singleton; }
 
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }
