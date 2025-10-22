@@ -98,6 +98,16 @@ void RaytraceRD::setup_uniform_data(RID render_target, RID tlas) {
 			uniforms.push_back(u);
 	}
 
+	{
+		RD::Uniform u;
+		u.binding = 5;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		//for (const RID& vertex : vertices) {
+		u.append_id(address_buffer);
+		//}
+		uniforms.push_back(u);
+	}
+
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
 
@@ -149,6 +159,17 @@ void RaytraceRD::upload_material_data() {
 			materials.size() * sizeof(MaterialData));
 
 	RD::get_singleton()->buffer_update(material_buffer, 0, materials.size() * sizeof(MaterialData), materials.ptr());
+}
+
+void RaytraceRD::upload_addresses() {
+	address_buffer = RD::get_singleton()->storage_buffer_create(
+			addresses.size() * sizeof(uint64_t)); // vertices and indices together
+
+	RD::get_singleton()->buffer_update(address_buffer, 0, addresses.size() * sizeof(uint64_t), addresses.ptr());
+}
+
+void RaytraceRD::add_address(const uint64_t &address) {
+	addresses.push_back(address);
 }
 
 RaytraceRD::~RaytraceRD() {

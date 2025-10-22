@@ -797,6 +797,9 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
 			device_features_vk_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+			device_features_vk_1_2.bufferDeviceAddress = VK_TRUE; // needed for GL_EXT_buffer_reference
+			device_features_vk_1_2.scalarBlockLayout = VK_TRUE; // needed for GL_EXT_scalar_block_layout
+			device_features_vk_1_2.runtimeDescriptorArray = VK_TRUE; // for runtime array!
 			device_features_vk_1_2.pNext = next_features;
 			next_features = &device_features_vk_1_2;
 		} else {
@@ -882,6 +885,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			descriptor_indexing_features.pNext = next_features;
 			next_features = &descriptor_indexing_features;
 		}
+		//if (enabled_device_extension_names.has())
 
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
 		device_features_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -5544,14 +5548,15 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_OPAQUE, VK_GEOMETRY_OPAQUE_BIT_KHR));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
 
-RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) {
+RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(Vector<BufferID> p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits, LocalVector<uint64_t> &p_vertex_address, LocalVector<uint64_t> &p_index_address, LocalVector<uint64_t> &p_uv_adresses) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
 	// Vertex positions is first buffer.
 	const VertexFormatInfo *vf_info = (const VertexFormatInfo *)p_vertex_format.id;
 	VkDeviceSize buffer_offset = vf_info->vk_attributes[0].offset;
+	VkDeviceSize uv_buffer_offset = vf_info->vk_attributes[2].offset;
 
-	VkDeviceAddress vertex_address = buffer_get_device_address(p_vertex_buffer) + buffer_offset;
-
+	VkDeviceAddress vertex_address = buffer_get_device_address(p_vertex_buffer[0]) + buffer_offset;
+	VkDeviceAddress uv_address = buffer_get_device_address(p_vertex_buffer[2]) + uv_buffer_offset;
 	VkDeviceAddress index_address = 0;
 
 	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
@@ -5564,6 +5569,11 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p
 		accel_info->geometry.geometry.triangles.indexType = VK_INDEX_TYPE_NONE_KHR;
 		accel_info->geometry.geometry.triangles.indexData.deviceAddress = 0;
 	}
+
+	// Adding the addresses to the vector so the gpu can use these adresses directly.
+	p_vertex_address.push_back(vertex_address);
+	p_index_address.push_back(index_address);
+	p_uv_adresses.push_back(uv_address);
 
 	VkDeviceSize vertex_stride = vf_info->vk_bindings[0].stride;
 	VkFormat vertex_format = vf_info->vk_attributes[0].format;

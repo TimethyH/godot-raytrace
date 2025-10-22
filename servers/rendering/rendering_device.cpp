@@ -42,6 +42,7 @@
 #include "modules/glslang/shader_compile.h"
 #endif
 
+#include "renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_scene_cull.h"
 
@@ -4624,40 +4625,40 @@ Error RenderingDevice::screen_free(DisplayServer::WindowID p_screen) {
 RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geometry_bits) {
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "The current rendering device has no raytracing support.");
 
-	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
-	ERR_FAIL_NULL_V(vertex_array, RID());
-	RDD::VertexFormatID vertex_format;
-	if (vertex_array->description != INVALID_ID) {
-		ERR_FAIL_COND_V(!vertex_formats.has(vertex_array->description), RID());
-		vertex_format = vertex_formats[vertex_array->description].driver_id;
-	}
+		VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
+		ERR_FAIL_NULL_V(vertex_array, RID());
+		RDD::VertexFormatID vertex_format;
+		if (vertex_array->description != INVALID_ID) {
+			ERR_FAIL_COND_V(!vertex_formats.has(vertex_array->description), RID());
+			vertex_format = vertex_formats[vertex_array->description].driver_id;
+		}
 
-	// Indices are optional.
-	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
-	RDD::BufferID index_buffer = RDD::BufferID();
-	IndexBufferFormat index_format = IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32;
-	uint32_t index_offset_bytes = 0;
-	uint32_t index_count = 0;
-	if (index_array) {
-		index_buffer = index_array->driver_id;
-		index_format = index_array->format;
-		index_offset_bytes = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
-		index_count = index_array->indices;
-	}
+		// Indices are optional.
+		IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
+		RDD::BufferID index_buffer = RDD::BufferID();
+		IndexBufferFormat index_format = IndexBufferFormat::INDEX_BUFFER_FORMAT_UINT32;
+		uint32_t index_offset_bytes = 0;
+		uint32_t index_count = 0;
+		if (index_array) {
+			index_buffer = index_array->driver_id;
+			index_format = index_array->format;
+			index_offset_bytes = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+			index_count = index_array->indices;
+		}
 
-	AccelerationStructure acceleration_structure;
-	acceleration_structure.type = RDD::ACCELERATION_STRUCTURE_TYPE_BLAS;
+		AccelerationStructure acceleration_structure;
+		acceleration_structure.type = RDD::ACCELERATION_STRUCTURE_TYPE_BLAS;
 
-	BitField<RDD::GeometryBits> geometry_bits = 0;
-	if (p_geometry_bits.has_flag(GEOMETRY_OPAQUE)) {
-		geometry_bits.set_flag(RDD::GEOMETRY_OPAQUE);
-	}
-	if (p_geometry_bits.has_flag(GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION)) {
-		geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
-	}
+		BitField<RDD::GeometryBits> geometry_bits = 0;
+		if (p_geometry_bits.has_flag(GEOMETRY_OPAQUE)) {
+			geometry_bits.set_flag(RDD::GEOMETRY_OPAQUE);
+		}
+		if (p_geometry_bits.has_flag(GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION)) {
+			geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
+		}
 
-	acceleration_structure.driver_id = driver->blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits);
-	ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to create BLAS.");
+		acceleration_structure.driver_id = driver->blas_create(vertex_array->buffers, vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits, gpu_addresses.vertex_adresses, gpu_addresses.index_adresses, gpu_addresses.uv_adresses);
+		ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to create BLAS.");
 	acceleration_structure.vertex_array = p_vertex_array;
 	acceleration_structure.index_array = p_index_array;
 

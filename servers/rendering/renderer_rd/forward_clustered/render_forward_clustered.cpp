@@ -3878,10 +3878,11 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 	// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
 	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
 			(1 << RS::ARRAY_NORMAL) |
+			(1 << RS::ARRAY_TEX_UV) |
 			(1 << RS::ARRAY_INDEX);
 
 	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
-	
+
 	if (vertex_array.is_null()) {
 		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
 		return RID();
@@ -3907,6 +3908,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 
 	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
 	uint32_t material_index = 0;
+	uint32_t address_id = 0;
 	// Iterate ALL instances in the scenario
 	for (uint64_t i = 0; i < instance_data.size(); i++) {
 		RendererSceneCull::InstanceData &idata = instance_data[i];
@@ -3955,7 +3957,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 				if (!material.is_valid()) {
 					continue; // No material on this surface
 				}
-
+				
 				raytracing_rd.set_material_data(material, material_storage, material_index);
 			}
 		}
@@ -3971,9 +3973,16 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			local_blases.push_back(new_blas);
 			transforms.push_back(world_transform);
 		}
+		// The data in the shader assumes this layout. vertex, index, uv.
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.vertex_adresses[address_id]);
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.index_adresses[address_id]);
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.uv_adresses[address_id]);
+		address_id++;
 	}
 
 	raytracing_rd.upload_material_data();
+	raytracing_rd.upload_addresses();
+	
 
 	// Maybe error message?
 	if (local_blases.size() <= 0) {

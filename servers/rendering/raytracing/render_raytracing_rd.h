@@ -26,6 +26,9 @@ public:
 
 	void set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& index);
 	void upload_material_data();
+	void upload_addresses();
+
+	void add_address(const uint64_t& address);
 
 	~RaytraceRD();
 
@@ -81,10 +84,14 @@ private:
 
 	LocalVector<MaterialData> materials;
 	LocalVector<RID> textures;
+	LocalVector<uint64_t> addresses;
+	LocalVector<uint64_t> vertices;
+	LocalVector<uint64_t> indices;
 	HashMap<RID, uint32_t> material_to_index;
 	HashMap<RID, uint32_t> texture_to_index;
 	uint32_t texture_id = 1;
 	RID material_buffer;
+	RID address_buffer;
 
 	bool default_texture_set = false;
 };
