@@ -67,15 +67,6 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		uniforms.push_back(u);
 	}
 
-	{
-		RD::Uniform u;
-		u.binding = 3;
-		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		RID render_texture = p_normal_render_target;
-		u.append_id(render_texture);
-		uniforms.push_back(u);
-	}
-
 	//{
 	//	RD::Uniform u;
 	//	u.binding = 4;
@@ -110,8 +101,12 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 				print_error("Invalid texture!");
 				u.append_id(sampler);
 				u.append_id(textures[0]); // default white
+				u.append_id(sampler);
+				u.append_id(textures[0]);
 			}
 			else {
+				u.append_id(sampler);
+				u.append_id(tex);
 				u.append_id(sampler);
 				u.append_id(tex);
 			}
@@ -126,6 +121,15 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		//for (const RID& vertex : vertices) {
 		u.append_id(address_buffer);
 		//}
+		uniforms.push_back(u);
+	}
+
+	{
+		RD::Uniform u;
+		u.binding = 6;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID render_texture = p_normal_render_target;
+		u.append_id(render_texture);
 		uniforms.push_back(u);
 	}
 

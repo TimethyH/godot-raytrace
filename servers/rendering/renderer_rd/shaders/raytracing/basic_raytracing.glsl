@@ -47,6 +47,7 @@ layout(set = 0, binding = 2) uniform ubo_t{
 	UBO data;
 }ubo;
 
+layout(set = 0, binding = 6) uniform texture2D normal;
 
 #CODE : RAYTRACE
 
@@ -82,7 +83,7 @@ void main(){
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
 	vec4 normalcolor = texelFetch(normal, pixCoords, 0);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(normalcolor.xyz, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue.xyz + normalcolor.xyz, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
