@@ -75,8 +75,10 @@ void main(){
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
 	vec4 normalcolor = texelFetch(normal, pixCoords, 0);
 
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(normalcolor.xyz, 1.0f));
+
 	if(prd.hitValue.x != 0.0f || prd.hitValue.y != 0.0f || prd.hitValue.z != 0.0){
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue.xyz, 1.0f));
+		
 	}
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0f,0.0f,0.0f,1.0f));

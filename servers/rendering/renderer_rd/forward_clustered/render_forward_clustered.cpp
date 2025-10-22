@@ -2144,7 +2144,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
-#ifndef RAYTRACING_TEST
+
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -2212,34 +2212,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}
-#else
+
 	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
 
 	RENDER_TIMESTAMP("Raytracing");
 
 	if (tlasID != RID()) {
 
-		//	Projection correction;
-		//correction.set_depth_correction(flip_y);
-		//correction.add_jitter_offset(taa_jitter);
-		//Projection projection = correction * cam_projection;
-
-		////store camera into ubo
-		//RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix);
-		//RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix);
-		//RendererRD::MaterialStorage::store_transform(cam_transform, ubo.inv_view_matrix);
-		//RendererRD::MaterialStorage::store_transform(cam_transform.affine_inverse(), ubo.view_matrix);
-
-		//for (uint32_t v = 0; v < view_count; v++) {
-		//	projection = correction * view_projection[v];
-		//	RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix_view[v]);
-		//	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix_view[v]);
-
-		//	ubo.eye_offset[v][0] = view_eye_offset[v].x;
-		//	ubo.eye_offset[v][1] = view_eye_offset[v].y;
-		//	ubo.eye_offset[v][2] = view_eye_offset[v].z;
-		//	ubo.eye_offset[v][3] = 0.0;
-		//}
 		p_render_data->scene_data->flip_y = true;
 		Projection proj_view = p_render_data->scene_data->get_cam_projection() * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
 		//p_render_data->scene_data->flip_y = false;
@@ -2260,7 +2239,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_end_label();
 	}
-#endif
+
 
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -2431,7 +2410,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RD::get_singleton()->draw_command_begin_label("Render 3D Transparent Pass");
 
 #ifdef RAYTRACING_TEST
-	RID rp_uniform_set;
+	//RID rp_uniform_set;
 #endif
 	rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, radiance_texture, samplers, true);
 
