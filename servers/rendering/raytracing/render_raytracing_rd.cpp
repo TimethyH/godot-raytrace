@@ -2,8 +2,6 @@
 
 //#include "servers/rendering/storage/render_scene_data.h"
 
-#include "basic_raytrace.glsl.gen.h"
-
 #if defined(VULKAN_ENABLED)
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #endif
@@ -87,7 +85,112 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 	//	uniforms.push_back(u);
 	//}
 
+	{
+		RD::Uniform u;
+		u.binding = 3;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(material_buffer);
+		uniforms.push_back(u);
+	}
+
+	{
+		MaterialStorage* material_storage = MaterialStorage::get_singleton();
+		RID sampler = material_storage->sampler_rd_get_default(
+			RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR,
+			RS::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+
+		// albedo texture
+		// TODO for now hardcoded to index 1 (albedo id) since its too late.
+		// TODO make it upload the correct textures and sample them with correct UVs
+		RD::Uniform u;
+		u.binding = 4;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		for (const RID& tex : textures) {
+			if (!tex.is_valid()) {
+				print_error("Invalid texture!");
+				u.append_id(sampler);
+				u.append_id(textures[0]); // default white
+			}
+			else {
+				u.append_id(sampler);
+				u.append_id(tex);
+			}
+		}
+		uniforms.push_back(u);
+	}
+
+	{
+		RD::Uniform u;
+		u.binding = 5;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		//for (const RID& vertex : vertices) {
+		u.append_id(address_buffer);
+		//}
+		uniforms.push_back(u);
+	}
+
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
+}
+
+void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &index) {
+	if (!material_to_index.has(p_material)) {
+		MaterialData mat_data;
+
+		Color albedo = p_material_storage->material_get_param(p_material, "albedo");
+		mat_data.albedo[0] = albedo.r;
+		mat_data.albedo[1] = albedo.g;
+		mat_data.albedo[2] = albedo.b;
+		mat_data.albedo[3] = albedo.a;
+
+		TextureStorage *texture_storage = TextureStorage::get_singleton();
+		if (default_texture_set == false) {
+			RID default_white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+			textures.push_back(default_white); // index 0 is used for default.
+			default_texture_set = true;
+		}
+		// Albedo
+		RID texture = p_material_storage->material_get_param(p_material, "texture_albedo");
+		if (texture.is_valid()) {
+			RID rd_texture = texture_storage->texture_get_rd_texture(texture);
+
+			if (rd_texture.is_valid()) {
+				if (!texture_to_index.has(rd_texture)) {
+					textures.push_back(rd_texture);
+					texture_to_index[rd_texture] = texture_id++;
+				}
+				mat_data.albedo_texture_index = texture_to_index[rd_texture];
+			} else {
+				mat_data.albedo_texture_index = 0;
+			}
+		} else {
+			mat_data.albedo_texture_index = 0;
+		}
+
+		mat_data.dummy = 0;
+		mat_data.dummy2 = 0;
+		mat_data.dummy3 = 0;
+
+		materials.push_back(mat_data);
+		material_to_index[p_material] = index++;
+	}
+}
+
+void RaytraceRD::upload_material_data() {
+	material_buffer = RD::get_singleton()->storage_buffer_create(
+			materials.size() * sizeof(MaterialData));
+
+	RD::get_singleton()->buffer_update(material_buffer, 0, materials.size() * sizeof(MaterialData), materials.ptr());
+}
+
+void RaytraceRD::upload_addresses() {
+	address_buffer = RD::get_singleton()->storage_buffer_create(
+			addresses.size() * sizeof(uint64_t)); // vertices and indices together
+
+	RD::get_singleton()->buffer_update(address_buffer, 0, addresses.size() * sizeof(uint64_t), addresses.ptr());
+}
+
+void RaytraceRD::add_address(const uint64_t &address) {
+	addresses.push_back(address);
 }
 
 RaytraceRD::~RaytraceRD() {
@@ -98,10 +201,10 @@ RaytraceRD::~RaytraceRD() {
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
 void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
 	RayPushConstant ray_push_constant;
-	ray_push_constant.clear_color[0] = { 1.0f};
-	ray_push_constant.clear_color[1] = { 0.0f};
-	ray_push_constant.clear_color[2] = { 1.0f};
-	ray_push_constant.clear_color[3] = { 1.0f};
+	ray_push_constant.clear_color[0] = { 1.0f };
+	ray_push_constant.clear_color[1] = { 0.0f };
+	ray_push_constant.clear_color[2] = { 1.0f };
+	ray_push_constant.clear_color[3] = { 1.0f };
 
 	Vector<uint8_t> push_constant_bytes;
 	push_constant_bytes.resize(sizeof(RayPushConstant));

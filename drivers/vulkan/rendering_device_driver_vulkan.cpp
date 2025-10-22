@@ -554,6 +554,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, false); // WIP
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
@@ -791,10 +792,14 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
+		VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptor_indexing_features = {}; // WIP
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
 			device_features_vk_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+			device_features_vk_1_2.bufferDeviceAddress = VK_TRUE; // needed for GL_EXT_buffer_reference
+			device_features_vk_1_2.scalarBlockLayout = VK_TRUE; // needed for GL_EXT_scalar_block_layout
+			device_features_vk_1_2.runtimeDescriptorArray = VK_TRUE; // for runtime array!
 			device_features_vk_1_2.pNext = next_features;
 			next_features = &device_features_vk_1_2;
 		} else {
@@ -874,6 +879,13 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			sync_2_features.pNext = next_features;
 			next_features = &sync_2_features;
 		}
+		// WIP
+		if (enabled_device_extension_names.has(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+			descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+			descriptor_indexing_features.pNext = next_features;
+			next_features = &descriptor_indexing_features;
+		}
+		//if (enabled_device_extension_names.has())
 
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
 		device_features_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -959,6 +971,20 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			raytracing_capabilities.raytracing_pipeline_support = raytracing_pipeline_features.rayTracingPipeline;
 			raytracing_capabilities.validation = raytracing_validation_features.rayTracingValidation;
 		}
+		// WIP
+		if (enabled_device_extension_names.has(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+			descriptor_indexing_capabilities.descriptor_indexing_support = true;
+			descriptor_indexing_capabilities.runtime_descriptor_array =
+					descriptor_indexing_features.runtimeDescriptorArray;
+			descriptor_indexing_capabilities.descriptor_binding_variable_descriptor_count =
+					descriptor_indexing_features.descriptorBindingVariableDescriptorCount;
+			descriptor_indexing_capabilities.shader_sampled_image_array_non_uniform_indexing =
+					descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing;
+			descriptor_indexing_capabilities.descriptor_binding_partially_bound =
+					descriptor_indexing_features.descriptorBindingPartiallyBound;
+			descriptor_indexing_capabilities.descriptor_binding_update_unused_while_pending =
+					descriptor_indexing_features.descriptorBindingUpdateUnusedWhilePending;
+		}
 	}
 
 	if (functions.GetPhysicalDeviceProperties2 != nullptr) {
@@ -971,6 +997,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceAccelerationStructurePropertiesKHR acceleration_structure_properties = {};
 		VkPhysicalDeviceRayTracingPipelinePropertiesKHR raytracing_properties = {};
 		VkPhysicalDeviceProperties2 physical_device_properties_2 = {};
+		VkPhysicalDeviceDescriptorIndexingPropertiesEXT descriptor_indexing_properties = {}; // WIP
 
 		const bool use_1_1_properties = physical_device_properties.apiVersion >= VK_API_VERSION_1_1;
 		if (use_1_1_properties) {
@@ -1015,6 +1042,14 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			raytracing_properties.pNext = next_properties;
 			next_properties = &raytracing_properties;
 		}
+		// WIP
+		if (descriptor_indexing_capabilities.descriptor_indexing_support) {
+			descriptor_indexing_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT;
+			descriptor_indexing_properties.pNext = next_properties;
+			next_properties = &descriptor_indexing_properties;
+
+			
+		}
 
 		physical_device_properties_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		physical_device_properties_2.pNext = next_properties;
@@ -1034,6 +1069,20 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		if (subgroup_capabilities.size_control_is_supported && (subgroup_size_control_properties.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT)) {
 			subgroup_capabilities.min_size = subgroup_size_control_properties.minSubgroupSize;
 			subgroup_capabilities.max_size = subgroup_size_control_properties.maxSubgroupSize;
+		}
+
+		// WIP
+		if (descriptor_indexing_capabilities.descriptor_indexing_support) {
+			descriptor_indexing_capabilities.max_update_after_bind_descriptors_in_all_pools =
+					descriptor_indexing_properties.maxUpdateAfterBindDescriptorsInAllPools;
+			descriptor_indexing_capabilities.max_per_stage_descriptor_update_after_bind_samplers =
+					descriptor_indexing_properties.maxPerStageDescriptorUpdateAfterBindSamplers;
+			descriptor_indexing_capabilities.max_per_stage_descriptor_update_after_bind_sampled_images =
+					descriptor_indexing_properties.maxPerStageDescriptorUpdateAfterBindSampledImages;
+			descriptor_indexing_capabilities.max_descriptor_set_update_after_bind_samplers =
+					descriptor_indexing_properties.maxDescriptorSetUpdateAfterBindSamplers;
+			descriptor_indexing_capabilities.max_descriptor_set_update_after_bind_sampled_images =
+					descriptor_indexing_properties.maxDescriptorSetUpdateAfterBindSampledImages;
 		}
 
 		if (fsr_capabilities.pipeline_supported || fsr_capabilities.primitive_supported || fsr_capabilities.attachment_supported) {
@@ -5499,14 +5548,15 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_OPAQUE, VK_GEOMETRY_OPAQUE_BIT_KHR));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
 
-RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) {
+RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(Vector<BufferID> p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits, LocalVector<uint64_t> &p_vertex_address, LocalVector<uint64_t> &p_index_address, LocalVector<uint64_t> &p_uv_adresses) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
 	// Vertex positions is first buffer.
 	const VertexFormatInfo *vf_info = (const VertexFormatInfo *)p_vertex_format.id;
 	VkDeviceSize buffer_offset = vf_info->vk_attributes[0].offset;
+	VkDeviceSize uv_buffer_offset = vf_info->vk_attributes[2].offset;
 
-	VkDeviceAddress vertex_address = buffer_get_device_address(p_vertex_buffer) + buffer_offset;
-
+	VkDeviceAddress vertex_address = buffer_get_device_address(p_vertex_buffer[0]) + buffer_offset;
+	VkDeviceAddress uv_address = buffer_get_device_address(p_vertex_buffer[2]) + uv_buffer_offset;
 	VkDeviceAddress index_address = 0;
 
 	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
@@ -5519,6 +5569,11 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p
 		accel_info->geometry.geometry.triangles.indexType = VK_INDEX_TYPE_NONE_KHR;
 		accel_info->geometry.geometry.triangles.indexData.deviceAddress = 0;
 	}
+
+	// Adding the addresses to the vector so the gpu can use these adresses directly.
+	p_vertex_address.push_back(vertex_address);
+	p_index_address.push_back(index_address);
+	p_uv_adresses.push_back(uv_address);
 
 	VkDeviceSize vertex_stride = vf_info->vk_bindings[0].stride;
 	VkFormat vertex_format = vf_info->vk_attributes[0].format;
@@ -5832,12 +5887,12 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 
 	// Shader binding table.
 	uint32_t raygenOffset = 0;
-	uint32_t missOffset = _align_up(raygenOffset + rpi->regions.raygen.size, base_alignment);
-	uint32_t hitOffset = _align_up(missOffset + rpi->regions.miss.size, base_alignment);
+	uint32_t hitOffset = _align_up(raygenOffset + rpi->regions.raygen.size, base_alignment);
+	uint32_t missOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
 	//uint32_t callableOffset = _align_up(hitOffset + rpi->regions.hit.size, base_alignment);
 
 	// Total SBT size
-	uint32_t sbt_size = hitOffset + rpi->regions.hit.size;
+	uint32_t sbt_size = missOffset + rpi->regions.miss.size;
 
 	// Create shader binding table buffer
 	rpi->sbt_buffer = buffer_create(
@@ -5850,8 +5905,8 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 
 	// Update regions addresses.
 	rpi->regions.raygen.deviceAddress = sbt_base_address + raygenOffset;
-	rpi->regions.miss.deviceAddress = sbt_base_address + missOffset;
 	rpi->regions.hit.deviceAddress = sbt_base_address + hitOffset;
+	rpi->regions.miss.deviceAddress = sbt_base_address + missOffset;
 	rpi->regions.call.deviceAddress = 0;
 
 	// Get shader group handles
@@ -5883,19 +5938,19 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 		++handle_index;
 	}
 
-	// Write miss handles
-	sbt_data = sbt_ptr + missOffset;
-	for (uint32_t i = 0; i < shader_info->region_count.miss_count; ++i) {
-		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
-		sbt_data += rpi->regions.miss.stride;
-		++handle_index;
-	}
-
 	// Write hit handles
 	sbt_data = sbt_ptr + hitOffset;
 	for (uint32_t i = 0; i < shader_info->region_count.hit_count; ++i) {
 		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
 		sbt_data += rpi->regions.hit.stride;
+		++handle_index;
+	}
+
+	// Write miss handles
+	sbt_data = sbt_ptr + missOffset;
+	for (uint32_t i = 0; i < shader_info->region_count.miss_count; ++i) {
+		memcpy(sbt_data, handles_ptr + handle_index * handle_size, handle_size);
+		sbt_data += rpi->regions.miss.stride;
 		++handle_index;
 	}
 

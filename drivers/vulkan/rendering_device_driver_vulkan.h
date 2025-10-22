@@ -105,6 +105,21 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 		uint32_t shader_group_base_alignment = 0;
 		bool validation = false;
 	};
+	// WIP
+	struct DescriptorIndexingCapabilities {
+		bool descriptor_indexing_support = false;
+		bool runtime_descriptor_array = false;
+		bool descriptor_binding_variable_descriptor_count = false;
+		bool shader_sampled_image_array_non_uniform_indexing = false;
+		bool descriptor_binding_partially_bound = false;
+		bool descriptor_binding_update_unused_while_pending = false;
+
+		uint32_t max_update_after_bind_descriptors_in_all_pools = 0;
+		uint32_t max_per_stage_descriptor_update_after_bind_samplers = 0;
+		uint32_t max_per_stage_descriptor_update_after_bind_sampled_images = 0;
+		uint32_t max_descriptor_set_update_after_bind_samplers = 0;
+		uint32_t max_descriptor_set_update_after_bind_sampled_images = 0;
+	};
 
 	struct DeviceFunctions {
 		PFN_vkCreateSwapchainKHR CreateSwapchainKHR = nullptr;
@@ -153,6 +168,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	RenderingShaderContainerFormatVulkan shader_container_format;
 	AccelerationStructureCapabilities acceleration_structure_capabilities;
 	RayTracingCapabilities raytracing_capabilities;
+	DescriptorIndexingCapabilities descriptor_indexing_capabilities;
 	bool buffer_device_address_support = false;
 	bool vulkan_memory_model_support = false;
 	bool vulkan_memory_model_device_scope_support = false;
@@ -679,7 +695,13 @@ public:
 		VkAccelerationStructureBuildRangeInfoKHR range_info;
 	};
 
-	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) override final;
+
+
+	virtual AccelerationStructureID blas_create(Vector<BufferID> p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t
+			p_vertex_count, BufferID
+			p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<
+			GeometryBits> p_geometry_bits, LocalVector<uint64_t>& p_vertex_address, LocalVector<uint64_t>& p_index_address, LocalVector
+			<uint64_t>& p_uv_adresses) override final;
 	virtual uint32_t tlas_instances_buffer_get_size_bytes(uint32_t p_instance_count) override final;
 	virtual void tlas_instances_buffer_fill(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blases, const Vector<Transform3D> &p_transforms) override final;
 	virtual AccelerationStructureID tlas_create(BufferID p_instances_buffer) override final;

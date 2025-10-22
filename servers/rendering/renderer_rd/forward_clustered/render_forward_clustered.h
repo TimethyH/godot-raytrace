@@ -45,7 +45,6 @@
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
-#include "servers/rendering/raytracing/basic_raytrace.glsl.gen.h"
 #include "servers/rendering/raytracing/render_raytracing_rd.h"
 
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
@@ -812,8 +811,6 @@ private:
 	};
 
 	rayPushConstant ray_pc;
-
-	BasicRaytraceRD raytracing_shader;
 
 	RendererRD::RaytraceRD raytracing_rd;
 

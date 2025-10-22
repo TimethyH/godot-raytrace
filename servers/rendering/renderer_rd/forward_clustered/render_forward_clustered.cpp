@@ -3859,6 +3859,7 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 	// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
 	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
 			(1 << RS::ARRAY_NORMAL) |
+			(1 << RS::ARRAY_TEX_UV) |
 			(1 << RS::ARRAY_INDEX);
 
 	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
@@ -3887,6 +3888,8 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	LocalVector<Transform3D> transforms;
 
 	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
+	uint32_t material_index = 0;
+	uint32_t address_id = 0;
 	// Iterate ALL instances in the scenario
 	for (uint64_t i = 0; i < instance_data.size(); i++) {
 		RendererSceneCull::InstanceData &idata = instance_data[i];
@@ -3895,6 +3898,13 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		uint32_t base_type = idata.flags & RendererSceneCull::InstanceData::FLAG_BASE_TYPE_MASK;
 		if (!((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK)) {
 			continue; // Skip non-geometry (lights, probes, etc.)
+		}
+
+		// Skip instances that don't cast shadows
+		// (there is helper geometry placed at the origin of the scene which gets hit by our raytracer
+		// This causes unexpected issues with material indexing)
+		if (!(idata.flags & RendererSceneCull::InstanceData::FLAG_CAST_SHADOWS)) {
+			continue;
 		}
 
 		// Access the geometry instance
@@ -3909,6 +3919,30 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = geom->get_transform();
 
+
+		if (mesh_rid.is_valid()) {
+			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+			RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+			uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
+			for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
+				RID material = inst->data->surface_materials[surface_index];
+
+				if (!material.is_valid()) {
+					material = mesh_storage->mesh_surface_get_material(mesh_rid, surface_index);
+				}
+
+				if (inst->data->material_override.is_valid()) {
+					material = inst->data->material_override;
+				}
+
+				if (!material.is_valid()) {
+					continue; // No material on this surface
+				}
+				
+				raytracing_rd.set_material_data(material, material_storage, material_index);
+			}
+		}
+
 		// Build BLAS for unique meshes
 		if (!rd->has_blas(mesh_rid)) {
 			RID new_blas = surface_create_blas(inst->surface_caches);
@@ -3920,7 +3954,16 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			local_blases.push_back(new_blas);
 			transforms.push_back(world_transform);
 		}
+		// The data in the shader assumes this layout. vertex, index, uv.
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.vertex_adresses[address_id]);
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.index_adresses[address_id]);
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.uv_adresses[address_id]);
+		address_id++;
 	}
+
+	raytracing_rd.upload_material_data();
+	raytracing_rd.upload_addresses();
+	
 
 	// Maybe error message?
 	if (local_blases.size() <= 0) {

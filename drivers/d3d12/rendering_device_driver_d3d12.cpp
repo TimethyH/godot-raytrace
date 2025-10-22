@@ -5207,7 +5207,9 @@ RDD::PipelineID RenderingDeviceDriverD3D12::render_pipeline_create(
 
 // ---- ACCELERATION STRUCTURES ----
 
-RDD::AccelerationStructureID RenderingDeviceDriverD3D12::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) {
+RDD::AccelerationStructureID RenderingDeviceDriverD3D12::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID
+		p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<
+		GeometryBits> p_geometry_bits, LocalVector<uint64_t>& p_vertex_address, LocalVector<uint64_t>& p_index_address) {
 	// TODO
 	ERR_FAIL_V_MSG(AccelerationStructureID(), "Unimplemented!");
 }

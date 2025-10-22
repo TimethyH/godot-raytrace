@@ -807,7 +807,9 @@ public:
 
 	// ---- ACCELERATION STRUCTURES ----
 
-	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) override final;
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID
+			p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<
+			GeometryBits> p_geometry_bits, LocalVector<uint64_t>& p_vertex_address, LocalVector<uint64_t>& p_index_address) override final;
 	virtual uint32_t tlas_instances_buffer_get_size_bytes(uint32_t p_instance_count) override final;
 	virtual void tlas_instances_buffer_fill(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blases, const Vector<Transform3D> &p_transforms) override final;
 	virtual AccelerationStructureID tlas_create(BufferID p_instances_buffer) override final;
