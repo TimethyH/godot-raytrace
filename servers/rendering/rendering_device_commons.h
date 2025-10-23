@@ -1043,7 +1043,7 @@ public:
 		bool writable = false;
 		uint32_t binding = 0;
 		BitField<ShaderStage> stages = {};
-		uint32_t length = 0; // Size of arrays (in total elements), or ubos (in bytes * total elements).
+		uint32_t length = 0; // Size of arrays (in total elements), or ubos (in bytes * total elements). // length of 512 == use bindless 
 
 		bool operator!=(const ShaderUniform &p_other) const {
 			return binding != p_other.binding || type != p_other.type || writable != p_other.writable || stages != p_other.stages || length != p_other.length;

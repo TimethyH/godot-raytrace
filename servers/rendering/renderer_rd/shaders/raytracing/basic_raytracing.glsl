@@ -134,7 +134,7 @@ layout(set = 0, binding = 3) buffer MaterialBuffer {
   MaterialData materials[];
 } material;
 
-layout(set = 0, binding = 4) uniform sampler2D albedo_texture[2];
+layout(set = 0, binding = 4) uniform sampler2D albedo_texture[512]; // 512 is a hardcoded flag which tells the program we intend to use bindless descriptors
 
 layout(set = 0, binding = 5) readonly buffer AddressBuffer {
   uint64_t address[];
@@ -161,6 +161,7 @@ vec2 getVertexUV(VertexData vtx, uint vertexIndex) {
 }
 
 #CODE : RAYTRACE
+
 void main() {
 
   // Barycentrics from hit attributes
@@ -191,8 +192,8 @@ void main() {
   vec2 uv = uv0 * bary.x + uv1 * bary.y + uv2 * bary.z;
 
   if (mat.albedo_texture_index > 0) { // Check if texture is valid
-        vec3 tex_color = texture(albedo_texture[mat.albedo_texture_index], uv).rgb;
-        albedo = tex_color; // Usually multiply with base color
+        vec3 tex_color = texture(albedo_texture[nonuniformEXT(mat.albedo_texture_index)], uv).rgb;
+		albedo = tex_color;
   }
 
 	prd.hitValue = albedo;
