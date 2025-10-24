@@ -48,6 +48,10 @@ layout(set = 0, binding = 2) uniform ubo_t{
 }ubo;
 
 layout(set = 0, binding = 6) uniform texture2D normal;
+layout(set = 0, binding = 7) uniform texture2D depth;
+layout(set = 0, binding = 8) uniform texture2D specular;
+
+layout(set = 0, binding = 9) uniform sampler point_sampler;
 
 #CODE : RAYTRACE
 
@@ -81,9 +85,20 @@ void main(){
 	);
 
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
-	vec4 normalcolor = texelFetch(normal, pixCoords, 0);
+	vec4 normal_roughness =  texelFetch(normal, pixCoords, 0); //texture(sampler2D(normal, point_sampler), pixCoords);
+	vec3 encoded_normal = normal_roughness.xyz;
+	float roughness = normal_roughness.w;
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(normalcolor.xyz, 1.0f));
+	vec3 normal_color = vec3(0.0f);
+	normal_color.xyz = normalize(encoded_normal.xyz * 2.0f - 1.0f);
+
+	float depth_color = texture(sampler2D(specular, point_sampler), pixCoords).r;
+
+	depth_color = depth_color * 2.0 - 1.0;
+
+	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
+
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(normal_color, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }

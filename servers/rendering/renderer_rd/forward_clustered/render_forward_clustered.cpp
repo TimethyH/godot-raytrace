@@ -2260,12 +2260,26 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			normal_texture = rb_data->get_normal_roughness();
 		}
 
-		// Fallback to default if still not available
 		if (normal_texture.is_null()) {
 			normal_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
 		}
 
-		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), normal_texture, RID(), tlasID);
+		RID depth_texture;
+		if (rb.is_valid() && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
+			depth_texture = rb->get_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH);
+		} else {
+			depth_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
+		}
+
+		RID specular_texture;
+		if (rb_data.is_valid() && rb_data->has_specular()) {
+			specular_texture = rb_data->get_specular();
+		} else {
+			// Fallback to default texture
+			specular_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		}
+
+		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), normal_texture, depth_texture, specular_texture, tlasID);
 
 		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
 

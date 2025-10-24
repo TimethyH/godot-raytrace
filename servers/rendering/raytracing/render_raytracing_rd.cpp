@@ -24,7 +24,7 @@ void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_ca
 	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
 	update_buffer(p_inv_view_proj, p_cam_pos);
 
-	setup_uniform_data(p_render_buffer, p_render_buffer, p_render_buffer, p_tlas);
+	setup_uniform_data(p_render_buffer, p_render_buffer, p_render_buffer, p_render_buffer, p_tlas);
 
 	raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(raytracing_shader.default_shader_rd);
 }
@@ -39,7 +39,7 @@ void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Transfor
 	RD::get_singleton()->buffer_update(ray_scene_state.uniform_buffer, 0, sizeof(RaySceneState::UBO), &ray_scene_state.ubo);
 }
 
-void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_specular_render_target, RID p_tlas) {
+void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas) {
 	
 	Vector<RD::Uniform> uniforms;
 	{
@@ -133,6 +133,36 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		uniforms.push_back(u);
 	}
 
+	{
+		RD::Uniform u;
+		u.binding = 7;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID render_texture = p_depth_render_target;
+		u.append_id(render_texture);
+		uniforms.push_back(u);
+	}
+
+	{
+		RD::Uniform u;
+		u.binding = 8;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID render_texture = p_specular_render_target;
+		u.append_id(render_texture);
+		uniforms.push_back(u);
+	}
+
+	const RendererRD::MaterialStorage::Samplers samplers = RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default();
+
+	{
+		RD::Uniform u;
+		u.binding = 9;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
+		RID sampler = samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+		
+		u.append_id(sampler);
+		uniforms.push_back(u);
+	}
+
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
 
@@ -180,6 +210,10 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 }
 
 void RaytraceRD::upload_material_data() {
+	if (materials.size() == 0) {
+		materials.push_back(MaterialData());
+	}
+
 	material_buffer = RD::get_singleton()->storage_buffer_create(
 			materials.size() * sizeof(MaterialData));
 

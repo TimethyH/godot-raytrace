@@ -22,7 +22,7 @@ public:
 	//RaytraceRD();
 	void init(const Projection &p_inv_view_proj, const Transform3D &p_cam_pos, RID p_render_buffer, RID p_render_buffer_normal, RID p_render_buffer_specular, RID p_tlas);
 	void update_buffer(const Projection& p_inv_view_proj, const Transform3D& cam_pos);
-	void setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_specular_render_target, RID p_tlas);
+	void setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas);
 
 	void set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& index);
 	void upload_material_data();
