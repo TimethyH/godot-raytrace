@@ -55,6 +55,13 @@ layout(set = 0, binding = 9) uniform sampler point_sampler;
 
 #CODE : RAYTRACE
 
+vec3 reconstruct_position_from_depth(vec2 screen_uv, float raw_depth) {
+    vec3 ndc = vec3(screen_uv * 2.0 - 1.0, raw_depth);
+    vec4 world_pos = ubo.data.inverseViewProj * vec4(ndc, 1.0);
+	world_pos /= world_pos.w;
+    return world_pos.xyz;
+}
+
 void main(){
 	prd.hitValue = vec3(0.0f);
 
@@ -92,13 +99,13 @@ void main(){
 	vec3 normal_color = vec3(0.0f);
 	normal_color.xyz = normalize(encoded_normal.xyz * 2.0f - 1.0f);
 
-	float depth_color = texture(sampler2D(specular, point_sampler), pixCoords).r;
+	float depth_color = texelFetch(depth, pixCoords, 0).r;
 
-	depth_color = depth_color * 2.0 - 1.0;
+	vec3 depth_world_pos = reconstruct_position_from_depth(in_uv, depth_color);
 
 	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(normal_color, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(depth_world_pos, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }

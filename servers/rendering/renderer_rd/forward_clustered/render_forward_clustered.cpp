@@ -2267,6 +2267,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RID depth_texture;
 		if (rb.is_valid() && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
 			depth_texture = rb->get_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH);
+		} else if (rb.is_valid() && rb->has_depth_texture()) {
+			depth_texture = rb->get_depth_texture();
 		} else {
 			depth_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
 		}
