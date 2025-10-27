@@ -1813,13 +1813,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::MaterialStorage::Samplers samplers;
 
 	PassMode depth_pass_mode = PASS_MODE_DEPTH;
-
-#ifdef RAYTRACING_TEST
-	depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
-#endif
- 
 	
 	uint32_t color_pass_flags = 0;
+
 	Vector<Color> depth_pass_clear;
 	bool using_separate_specular = false;
 	bool using_ssr = false;
@@ -1828,6 +1824,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0;
 	bool using_ssil = !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssil_enabled(p_render_data->environment);
 	bool using_motion_pass = rb_data.is_valid() && using_upscaling;
+
+		#ifdef RAYTRACING_TEST
+	depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
+	color_pass_flags |= COLOR_PASS_FLAG_SEPARATE_SPECULAR;
+	using_separate_specular = true;
+#endif
 
 	if (is_reflection_probe) {
 		uint32_t resolution = light_storage->reflection_probe_instance_get_resolution(p_render_data->reflection_probe);
@@ -2278,7 +2280,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			specular_texture = rb_data->get_specular();
 		} else {
 			// Fallback to default texture
-			specular_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+			specular_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 		}
 
 		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), normal_texture, depth_texture, specular_texture, tlasID);

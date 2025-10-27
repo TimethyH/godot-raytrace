@@ -73,6 +73,20 @@ void main(){
 	vec4 worldDir = ubo.data.inverseViewProj * clip;
 	worldDir /= worldDir.w;
 
+	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
+	vec4 normal_roughness =  texelFetch(normal, pixCoords, 0); //texture(sampler2D(normal, point_sampler), pixCoords);
+	vec3 encoded_normal = normal_roughness.xyz;
+	float roughness = normal_roughness.w;
+
+	vec3 normal_color = vec3(0.0f);
+	normal_color.xyz = normalize(encoded_normal.xyz * 2.0f - 1.0f);
+
+	float metallic = texelFetch(specular, pixCoords, 0).w;
+
+	float depth_color = texelFetch(depth, pixCoords, 0).r;
+
+	vec3 depth_world_pos = reconstruct_position_from_depth(in_uv, depth_color);
+
 	//vec4 target = vec4(d.x, d.y, 1.0, 1.0);
 	vec4 origin = vec4(ubo.data.cameraPos, 1.0);
 	vec4 direction = vec4(normalize(worldDir.xyz - ubo.data.cameraPos), 0);
@@ -91,21 +105,9 @@ void main(){
 		0
 	);
 
-	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
-	vec4 normal_roughness =  texelFetch(normal, pixCoords, 0); //texture(sampler2D(normal, point_sampler), pixCoords);
-	vec3 encoded_normal = normal_roughness.xyz;
-	float roughness = normal_roughness.w;
-
-	vec3 normal_color = vec3(0.0f);
-	normal_color.xyz = normalize(encoded_normal.xyz * 2.0f - 1.0f);
-
-	float depth_color = texelFetch(depth, pixCoords, 0).r;
-
-	vec3 depth_world_pos = reconstruct_position_from_depth(in_uv, depth_color);
-
 	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(depth_world_pos, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(metallic.xxx, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
@@ -201,7 +203,7 @@ void main() {
 
   MaterialData mat = material.materials[mat_index];
   vec3 albedo = mat.color.rgb;
-
+  
   VertexData uvData   = VertexData(uv_addr);
   IndexData  indices  = IndexData(index_addr);
 
