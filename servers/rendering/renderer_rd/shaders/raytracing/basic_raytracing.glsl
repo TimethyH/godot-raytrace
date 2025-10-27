@@ -103,14 +103,16 @@ void main(){
 
 	vec3 accumulated_color = prd.hitValue;
 
+	vec4 origin = vec4(world_pos + R * 1e-4, 1.0);
+	vec4 direction = vec4(R, 0);
+
 	if(metallic > 0.01){
 		// Iterative loop for the reflections
-		while(depth < 3) // TODO remove hardcoded value with vulkan recursion limit
+		while(depth < 1) // TODO remove hardcoded value with vulkan recursion limit
 		{
 			float previous_weight = 1.0f;
 
-			vec4 origin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
-			vec4 direction = vec4(R, 0);
+			
 
 			traceRayEXT(tlas,
 			gl_RayFlagsOpaqueEXT,
@@ -139,7 +141,7 @@ void main(){
 
 	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(decoded_normals, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
@@ -283,5 +285,5 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 #CODE : RAYTRACE
 
 void main() {
-	prd.hitValue = vec3(1.0, 0.0, 1.0);
+	prd.hitValue = vec3(0.0, 0.0, 0.0);
 }
