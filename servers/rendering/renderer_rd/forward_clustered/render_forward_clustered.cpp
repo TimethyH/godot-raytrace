@@ -2242,11 +2242,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (tlasID != RID()) {
 
 		p_render_data->scene_data->flip_y = true;
-		Projection proj_view = p_render_data->scene_data->get_cam_projection() * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+		Projection view = Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+		Projection proj_view = p_render_data->scene_data->get_cam_projection() * view;
 		//p_render_data->scene_data->flip_y = false;
 		//Projection inv_proj_view = p_render_data->scene_data->get_cam_projection() * p_render_data->scene_data->get_view_projection(0);
 
-		raytracing_rd.update_buffer(proj_view.inverse(), p_render_data->scene_data->cam_transform);
+		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform);
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 

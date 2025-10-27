@@ -41,6 +41,7 @@ layout(push_constant) uniform PushConstants {
 struct UBO{
 	vec3 cameraPos;
 	mat4 inverseViewProj;
+	mat4 inverseView;
 };
 
 layout(set = 0, binding = 2) uniform ubo_t{
@@ -63,7 +64,10 @@ vec3 reconstruct_position_from_depth(vec2 screen_uv, float raw_depth) {
 }
 
 void main(){
-	prd.hitValue = vec3(0.0f);
+	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
+
+	// Initialize prd values
+	prd.hitValue = imageLoad(image, pixCoords).xyz;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeEXT.xy);
@@ -73,41 +77,69 @@ void main(){
 	vec4 worldDir = ubo.data.inverseViewProj * clip;
 	worldDir /= worldDir.w;
 
-	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
 	vec4 normal_roughness =  texelFetch(normal, pixCoords, 0); //texture(sampler2D(normal, point_sampler), pixCoords);
 	vec3 encoded_normal = normal_roughness.xyz;
 	float roughness = normal_roughness.w;
 
-	vec3 normal_color = vec3(0.0f);
-	normal_color.xyz = normalize(encoded_normal.xyz * 2.0f - 1.0f);
+	vec3 decoded_normals = vec3(0.0f);
+	decoded_normals = encoded_normal.xyz * 2.0f - 1.0f;
+	decoded_normals = normalize(mat3(ubo.data.inverseView) * decoded_normals);
 
 	float metallic = texelFetch(specular, pixCoords, 0).w;
 
 	float depth_color = texelFetch(depth, pixCoords, 0).r;
 
-	vec3 depth_world_pos = reconstruct_position_from_depth(in_uv, depth_color);
+	vec3 world_pos = reconstruct_position_from_depth(in_uv, depth_color);
 
-	//vec4 target = vec4(d.x, d.y, 1.0, 1.0);
-	vec4 origin = vec4(ubo.data.cameraPos, 1.0);
-	vec4 direction = vec4(normalize(worldDir.xyz - ubo.data.cameraPos), 0);
 	float t_min = 0.001;
 	float t_max = 10000.0;
-	traceRayEXT(tlas,
-		gl_RayFlagsOpaqueEXT,
-		0xFF,
-		0,
-		0,
-		0,
-		origin.xyz,
-		t_min,
-		direction.xyz,
-		t_max,
-		0
-	);
+
+	int depth = 0;
+
+	//vec3 view = normalize(ubo.data.cameraPos - world_pos);
+
+	vec3 V = normalize(ubo.data.cameraPos - world_pos);
+	vec3 R = reflect(-V, decoded_normals);
+
+	vec3 accumulated_color = prd.hitValue;
+
+	if(metallic > 0.01){
+		// Iterative loop for the reflections
+		while(depth < 3) // TODO remove hardcoded value with vulkan recursion limit
+		{
+			float previous_weight = 1.0f;
+
+			vec4 origin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
+			vec4 direction = vec4(R, 0);
+
+			traceRayEXT(tlas,
+			gl_RayFlagsOpaqueEXT,
+			0xFF,
+			0,
+			0,
+			0,
+			origin.xyz,
+			t_min,
+			direction.xyz,
+			t_max,
+			0
+			);
+
+			accumulated_color += prd.hitValue * previous_weight;
+
+			depth++;
+		}
+	}
+	
+
+	//vec4 target = vec4(d.x, d.y, 1.0, 1.0);
+	
+	
+	
 
 	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(metallic.xxx, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(decoded_normals, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
