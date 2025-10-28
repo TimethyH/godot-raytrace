@@ -64,9 +64,9 @@ private:
 	struct MaterialData {
 		float albedo[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // 16
 		uint32_t albedo_texture_index = 0;
-		uint32_t dummy;
-		uint32_t dummy2;
-		uint32_t dummy3; // 4x4 = 16
+		uint32_t normal_texture_index = 0;
+		uint32_t metallic_texture_index = 0;
+		uint32_t roughness_texture_index = 0; // 4x4 = 16
 	};
 
 	struct RaytracingShader {

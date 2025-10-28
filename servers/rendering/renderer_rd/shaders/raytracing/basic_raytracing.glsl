@@ -21,9 +21,9 @@ struct hitPayload
 struct MaterialData {
 	vec4 color;
 	uint albedo_texture_index;
-	uint dummy;
-	uint dummy2;
-	uint dummy3;
+	uint normal_texture_index;
+	uint metallic_texture_index;
+	uint roughness_texture_index;
 };
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
@@ -237,6 +237,9 @@ void main() {
 
   MaterialData mat = material.materials[mat_index];
   vec3 albedo = mat.color.rgb;
+  vec3 normal = vec3(0);
+  float metallic = 0;
+  float roughness = 0;
   
   VertexData uvData   = VertexData(uv_addr);
   IndexData  indices  = IndexData(index_addr);
@@ -256,6 +259,11 @@ void main() {
   if (mat.albedo_texture_index > 0) { // Check if texture is valid
         vec3 tex_color = texture(albedo_texture[mat.albedo_texture_index], uv).rgb;
         albedo = tex_color; // Usually multiply with base color
+  }
+
+  if (mat.metallic_texture_index > 0) {
+        float tex_color = texture(albedo_texture[mat.metallic_texture_index], uv).b;
+        metallic = tex_color;
   }
 
 	prd.hitValue = albedo;

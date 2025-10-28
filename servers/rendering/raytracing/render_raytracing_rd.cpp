@@ -201,9 +201,44 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 			mat_data.albedo_texture_index = 0;
 		}
 
-		mat_data.dummy = 0;
-		mat_data.dummy2 = 0;
-		mat_data.dummy3 = 0;
+		RID normal_texture = p_material_storage->material_get_param(p_material, "texture_normal");
+		if (normal_texture.is_valid()) {
+			RID rd_texture = texture_storage->texture_get_rd_texture(normal_texture);
+
+			if (rd_texture.is_valid()) {
+				if (!texture_to_index.has(rd_texture)) {
+					textures.push_back(rd_texture);
+					texture_to_index[rd_texture] = texture_id++;
+				}
+				mat_data.normal_texture_index = texture_to_index[rd_texture];
+			}
+		}
+
+		RID metallic_texture = p_material_storage->material_get_param(p_material, "texture_metallic");
+		if (metallic_texture.is_valid()) {
+			RID rd_texture = texture_storage->texture_get_rd_texture(metallic_texture);
+
+			if (rd_texture.is_valid()) {
+				if (!texture_to_index.has(rd_texture)) {
+					textures.push_back(rd_texture);
+					texture_to_index[rd_texture] = texture_id++;
+				}
+				mat_data.metallic_texture_index = texture_to_index[rd_texture];
+			}
+		}
+
+		RID roughness_texture = p_material_storage->material_get_param(p_material, "texture_roughness");
+		if (roughness_texture.is_valid()) {
+			RID rd_texture = texture_storage->texture_get_rd_texture(roughness_texture);
+
+			if (rd_texture.is_valid()) {
+				if (!texture_to_index.has(rd_texture)) {
+					textures.push_back(rd_texture);
+					texture_to_index[rd_texture] = texture_id++;
+				}
+				mat_data.roughness_texture_index = texture_to_index[rd_texture];
+			}
+		}
 
 		materials.push_back(mat_data);
 		material_to_index[p_material] = index++;
