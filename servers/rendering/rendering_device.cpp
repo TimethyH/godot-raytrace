@@ -246,31 +246,78 @@ RenderingDevice *RenderingDevice::get_singleton() {
 //			geometry_bits);
 //}
 
-bool RenderingDevice::has_mesh(RID p_mesh_rid) {
+RID RenderingDevice::_tlas_create(const TypedArray<RID> &p_blases) {
+	Vector<RID> blases = Variant(p_blases);
+	return tlas_create(blases);
+}
+
+bool RenderingDevice::blas_map_has_mesh(RID p_mesh_rid) {
 	return mesh_blases_map.has(p_mesh_rid);
 }
 
 void RenderingDevice::blases_add_to_map(RID p_mesh_rid, LocalVector<LocalVector<RID>> &p_blases) {
 	if (mesh_blases_map.has(p_mesh_rid)) {
 		WARN_PRINT("This mesh id already contained blases and so the old ones are overwritten");
+
+		/*LocalVector<LocalVector<RID>> old_blas_map = mesh_blases_map[p_mesh_rid];
+		for (uint32_t i = 0; i < old_blas_map.size(); ++i) {
+			for (uint32_t j = 0; j < old_blas_map[i].size(); ++j) {
+				AccelerationStructure *blas = acceleration_structure_owner.get_or_null(old_blas_map[i][j]);
+				DEV_ASSERT(blas);
+
+				driver->acceleration_structure_free(blas->driver_id);
+			}
+		}*/
 	}
 	mesh_blases_map[p_mesh_rid] = p_blases;
 }
 
 LocalVector<RID> &RenderingDevice::get_type_blases(AccelerationStructureGeometryType p_type) {
-	if (p_type == STATIC) {
-		return static_blases;
-	} else {
-		return dynamic_blases;
+	switch (p_type) {
+		case STATIC:
+			return static_blases;
+			break;
+		case DYNAMIC:
+			return dynamic_blases;
+			break;
+		default:
+			ERR_FAIL_V_MSG(error_rid_vector, "Specified BLAS type not implemented");
 	}
 }
 
-RID &RenderingDevice::tlas_get_type(AccelerationStructureGeometryType p_type) {
-	if (p_type == STATIC) {
-		return static_tlas;
-	} else {
-		return dynamic_tlas;
+RID RenderingDevice::tlas_get_type(AccelerationStructureGeometryType p_type) {
+	switch (p_type) {
+		case STATIC:
+			return static_tlas;
+			break;
+		case DYNAMIC:
+			return dynamic_tlas;
+			break;
+		default:
+			ERR_FAIL_V_MSG(RID(), "Specified TLAS type not implemented");
 	}
+}
+
+void RenderingDevice::tlas_set_type(AccelerationStructureGeometryType p_type, RID p_tlas) {
+	RID *tlas_rid = nullptr;
+
+	switch (p_type) {
+		case STATIC:
+			tlas_rid = &static_tlas;
+			break;
+		case DYNAMIC:
+			tlas_rid = &dynamic_tlas;
+			break;
+		default:
+			ERR_FAIL_MSG("Specified TLAS type not implemented");
+	}
+
+	AccelerationStructure *tlas = acceleration_structure_owner.get_or_null(*tlas_rid);
+	if (tlas) {
+		//driver->acceleration_structure_free(tlas->driver_id);
+	}
+
+	*tlas_rid = p_tlas;
 }
 
 LocalVector<RID> RenderingDevice::blases_get_or_null(RID p_mesh_rid, uint32_t p_lod) {
@@ -930,7 +977,7 @@ uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, 0, "Buffer argument is not a valid buffer of any type.");
-	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
+	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
 
 	return driver->buffer_get_device_address(buffer->driver_id);
 }
@@ -950,7 +997,7 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 				"The GPU doesn't support buffer address flag.");
 #endif
 
-		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 	}
 
 	if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
@@ -3277,7 +3324,7 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
 	}
 	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
-		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 	}
 	if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
@@ -3455,7 +3502,7 @@ RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferForm
 		index_buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
 	}
 	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
-		index_buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		index_buffer.usage.set_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 	}
 	if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
 		index_buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
@@ -3707,7 +3754,7 @@ RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 	buffer.size = p_size_bytes;
 	buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_UNIFORM_BIT);
 	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
-		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 	}
 	buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU);
 	ERR_FAIL_COND_V(!buffer.driver_id, RID());
@@ -4624,7 +4671,7 @@ Error RenderingDevice::screen_free(DisplayServer::WindowID p_screen) {
 /**** ACCELERATION STRUCTURE ****/
 /********************************/
 
-RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geometry_bits) {
+RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, RID p_transform_buffer, uint64_t p_transform_offset) {
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "The current rendering device has no raytracing support.");
 
 	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
@@ -4634,6 +4681,7 @@ RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, BitField
 		ERR_FAIL_COND_V(!vertex_formats.has(vertex_array->description), RID());
 		vertex_format = vertex_formats[vertex_array->description].driver_id;
 	}
+	_check_transfer_worker_vertex_array(vertex_array);
 
 	// Indices are optional.
 	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
@@ -4646,23 +4694,22 @@ RID RenderingDevice::blas_create(RID p_vertex_array, RID p_index_array, BitField
 		index_format = index_array->format;
 		index_offset_bytes = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
 		index_count = index_array->indices;
+		_check_transfer_worker_index_array(index_array);
 	}
+
+	Buffer *transform_buffer = storage_buffer_owner.get_or_null(p_transform_buffer);
+	ERR_FAIL_NULL_V(transform_buffer, RID());
+	ERR_FAIL_COND_V_MSG(!transform_buffer->usage.has_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT), RID(), "Transform buffer provided was not created for shader device address usage.");
+	ERR_FAIL_COND_V_MSG(!transform_buffer->usage.has_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT), RID(), "Transform buffer provided was not created for acceleration structure build input.");
+	_check_transfer_worker_buffer(transform_buffer);
 
 	AccelerationStructure acceleration_structure;
 	acceleration_structure.type = RDD::ACCELERATION_STRUCTURE_TYPE_BLAS;
-
-	BitField<RDD::GeometryBits> geometry_bits = 0;
-	if (p_geometry_bits.has_flag(GEOMETRY_OPAQUE)) {
-		geometry_bits.set_flag(RDD::GEOMETRY_OPAQUE);
-	}
-	if (p_geometry_bits.has_flag(GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION)) {
-		geometry_bits.set_flag(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION);
-	}
-
-	acceleration_structure.driver_id = driver->blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, geometry_bits);
+	acceleration_structure.driver_id = driver->blas_create(vertex_array->buffers[0], vertex_array->offsets[0], vertex_format, vertex_array->vertex_count, index_buffer, index_format, index_offset_bytes, index_count, transform_buffer->driver_id, p_transform_offset);
 	ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to create BLAS.");
 	acceleration_structure.vertex_array = p_vertex_array;
 	acceleration_structure.index_array = p_index_array;
+	acceleration_structure.transform_buffer = p_transform_buffer;
 
 	acceleration_structure.draw_tracker = RDG::resource_tracker_create();
 	acceleration_structure.draw_tracker->acceleration_structure_driver_id = acceleration_structure.driver_id;
@@ -4688,7 +4735,7 @@ BitField<RDD::BufferUsageBits> RenderingDevice::_creation_to_usage_bits(BitField
 		ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_BUFFER_DEVICE_ADDRESS), 0,
 				"The GPU doesn't support buffer address flag.");
 #endif
-		usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+		usage.set_flag(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 	}
 
 	if (p_creation_bits.has_flag(BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT)) {
@@ -4711,7 +4758,7 @@ RID RenderingDevice::tlas_instances_buffer_create(uint32_t p_instance_count, Bit
 	InstancesBuffer instances_buffer;
 	instances_buffer.instance_count = p_instance_count;
 	instances_buffer.buffer.size = instances_buffer_size_bytes;
-	instances_buffer.buffer.usage = _creation_to_usage_bits(p_creation_bits) | RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT | RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT;
+	instances_buffer.buffer.usage = _creation_to_usage_bits(p_creation_bits) | RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT;
 	instances_buffer.buffer.driver_id = driver->buffer_create(instances_buffer.buffer.size, instances_buffer.buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_CPU);
 	ERR_FAIL_COND_V_MSG(!instances_buffer.buffer.driver_id, RID(), "Failed to create instances buffer.");
 
@@ -4750,17 +4797,21 @@ void RenderingDevice::tlas_instances_buffer_fill(RID p_instances_buffer, const V
 	driver->tlas_instances_buffer_fill(instances_buffer->buffer.driver_id, blases, p_transforms);
 }
 
-RID RenderingDevice::tlas_create(RID p_instances_buffer) {
+RID RenderingDevice::tlas_create(const Vector<RID> &p_blases) {
 	ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_RAYTRACING), RID(), "The current rendering device has no raytracing support.");
 
-	const InstancesBuffer *instances_buffer = instances_buffer_owner.get_or_null(p_instances_buffer);
-	ERR_FAIL_NULL_V_MSG(instances_buffer, RID(), "Instances buffer input is not valid.");
+	LocalVector<RDD::AccelerationStructureID> blases;
+	for (Vector<RID>::ConstIterator itr = p_blases.begin(); itr != p_blases.end(); ++itr) {
+		const AccelerationStructure *blas = acceleration_structure_owner.get_or_null(*itr);
+		ERR_FAIL_NULL_V(blas, RID());
+		blases.push_back(blas->driver_id);
+	}
 
 	AccelerationStructure acceleration_structure;
 	acceleration_structure.type = RDD::ACCELERATION_STRUCTURE_TYPE_TLAS;
-	acceleration_structure.driver_id = driver->tlas_create(instances_buffer->buffer.driver_id);
+	acceleration_structure.driver_id = driver->tlas_create(blases);
 	ERR_FAIL_COND_V_MSG(!acceleration_structure.driver_id, RID(), "Failed to create TLAS.");
-	acceleration_structure.instances_buffer = p_instances_buffer;
+	acceleration_structure.blases = p_blases;
 
 	acceleration_structure.draw_tracker = RDG::resource_tracker_create();
 	acceleration_structure.draw_tracker->acceleration_structure_driver_id = acceleration_structure.driver_id;
@@ -4784,7 +4835,7 @@ Error RenderingDevice::acceleration_structure_build(RID p_acceleration_structure
 	ERR_FAIL_COND_V_MSG(raytracing_list.active, ERR_INVALID_PARAMETER,
 			"Building acceleration structures is forbidden during creation of a raytracing list.");
 
-	AccelerationStructure *accel = acceleration_structure_owner.get_or_null(p_acceleration_structure);
+	const AccelerationStructure *accel = acceleration_structure_owner.get_or_null(p_acceleration_structure);
 	ERR_FAIL_NULL_V_MSG(accel, ERR_INVALID_PARAMETER, "Acceleration structure argument is not valid.");
 
 	Vector<RDG::ResourceTracker *> src_trackers;
@@ -4798,15 +4849,12 @@ Error RenderingDevice::acceleration_structure_build(RID p_acceleration_structure
 			IndexArray *index_array = index_array_owner.get_or_null(accel->index_array);
 			if (index_array && index_array->draw_tracker) {
 				src_trackers.append(index_array->draw_tracker);
-			_check_transfer_worker_index_array(index_array);
+				_check_transfer_worker_index_array(index_array);
 			}
 
 		} break;
 		case RDD::ACCELERATION_STRUCTURE_TYPE_TLAS: {
-			const InstancesBuffer *instances_buffer = instances_buffer_owner.get_or_null(accel->instances_buffer);
-			ERR_FAIL_NULL_V_MSG(instances_buffer, ERR_INVALID_PARAMETER, "Instances buffer input is not valid.");
-
-			for (Vector<RID>::ConstIterator itr = instances_buffer->blases.begin(); itr != instances_buffer->blases.end(); ++itr) {
+			for (Vector<RID>::ConstIterator itr = accel->blases.begin(); itr != accel->blases.end(); ++itr) {
 				const AccelerationStructure *blas = acceleration_structure_owner.get_or_null(*itr);
 				ERR_FAIL_NULL_V_MSG(blas, ERR_INVALID_PARAMETER, "BLAS input is not valid.");
 				if (blas->draw_tracker) {
@@ -4818,17 +4866,7 @@ Error RenderingDevice::acceleration_structure_build(RID p_acceleration_structure
 			ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Invalid acceleration structure type");
 	}
 
-	uint64_t scratch_size = driver->acceleration_structure_get_scratch_size_bytes(accel->driver_id);
-	if (accel->scratch_buffer && driver->buffer_get_allocation_size(accel->scratch_buffer) < scratch_size) {
-		driver->buffer_free(accel->scratch_buffer);
-		accel->scratch_buffer = RDD::BufferID();
-	}
-	if (!accel->scratch_buffer) {
-		accel->scratch_buffer = driver->buffer_create(scratch_size, RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU);
-		ERR_FAIL_COND_V(!accel->scratch_buffer, ERR_CANT_CREATE);
-	}
-
-	draw_graph.add_acceleration_structure_build(accel->driver_id, accel->scratch_buffer, accel->draw_tracker, src_trackers);
+	draw_graph.add_acceleration_structure_build(accel->driver_id, accel->draw_tracker, src_trackers);
 
 	return OK;
 }
@@ -7064,10 +7102,6 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	// Acceleration structures.
 	while (frames[p_frame].acceleration_structures_to_dispose_of.front()) {
 		AccelerationStructure &acceleration_structure = frames[p_frame].acceleration_structures_to_dispose_of.front()->get();
-
-		if (acceleration_structure.scratch_buffer) {
-			driver->buffer_free(acceleration_structure.scratch_buffer);
-		}
 		driver->acceleration_structure_free(acceleration_structure.driver_id);
 
 		frames[p_frame].acceleration_structures_to_dispose_of.pop_front();
@@ -8213,10 +8247,8 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("raytracing_pipeline_create", "shader", "specialization_constants"), &RenderingDevice::_raytracing_pipeline_create, DEFVAL(TypedArray<RDPipelineSpecializationConstant>()));
 	ClassDB::bind_method(D_METHOD("raytracing_pipeline_is_valid", "raytracing_pipeline"), &RenderingDevice::raytracing_pipeline_is_valid);
 
-	ClassDB::bind_method(D_METHOD("blas_create", "vertex_array", "index_array", "geometry_bits"), &RenderingDevice::blas_create, DEFVAL(0));
-	ClassDB::bind_method(D_METHOD("tlas_instances_buffer_create", "instance_count", "creation_bits"), &RenderingDevice::tlas_instances_buffer_create, DEFVAL(0));
-	ClassDB::bind_method(D_METHOD("tlas_instances_buffer_fill", "instances_buffer", "p_blases", "transforms"), &RenderingDevice::_tlas_instances_buffer_fill);
-	ClassDB::bind_method(D_METHOD("tlas_create", "instances_buffer"), &RenderingDevice::tlas_create);
+	ClassDB::bind_method(D_METHOD("blas_create", "vertex_array", "index_array", "transform_buffer", "transform_offset"), &RenderingDevice::blas_create, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("tlas_create", "blases"), &RenderingDevice::_tlas_create);
 	ClassDB::bind_method(D_METHOD("acceleration_structure_build", "acceleration_structure"), &RenderingDevice::acceleration_structure_build);
 
 	ClassDB::bind_method(D_METHOD("raytracing_list_begin"), &RenderingDevice::raytracing_list_begin);

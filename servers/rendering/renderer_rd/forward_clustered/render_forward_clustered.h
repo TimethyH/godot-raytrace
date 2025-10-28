@@ -379,6 +379,10 @@ private:
 			}
 		};
 
+		struct TransformData {
+			float transform[12]; // Acceleration structure transform should be 3x4
+		};
+
 		static_assert(std::is_trivially_destructible_v<InstanceData>);
 		static_assert(std::is_trivially_constructible_v<InstanceData>);
 
@@ -397,6 +401,10 @@ private:
 		RID instance_buffer[RENDER_LIST_MAX];
 		uint32_t instance_buffer_size[RENDER_LIST_MAX] = { 0, 0, 0 };
 		LocalVector<InstanceData> instance_data[RENDER_LIST_MAX];
+
+		RID transform_buffer[RENDER_LIST_MAX];
+		uint32_t transform_buffer_size[RENDER_LIST_MAX] = { 0, 0, 0 };
+		LocalVector<TransformData> transform_data[RENDER_LIST_MAX];
 
 		LightmapCaptureData *lightmap_captures = nullptr;
 		uint32_t max_lightmap_captures;
@@ -428,6 +436,9 @@ private:
 		};
 
 		LocalVector<ShadowPass> shadow_passes;
+
+		LocalVector<RID> blass;
+		RID tlas;
 
 	} scene_state;
 
@@ -461,6 +472,7 @@ private:
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
 
 	void _update_instance_data_buffer(RenderListType p_render_list);
+	void _update_transform_data_buffer(RenderListType p_render_list);
 	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);
 	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi = false, bool p_using_opaque_gi = false, bool p_using_motion_pass = false, bool p_append = false);
 
@@ -801,8 +813,11 @@ public:
 		RID render_target;
 	};
 
-	LocalVector<LocalVector<RID>> create_surface_blases(void *p_surface);
+	void _tlas_create(RenderListType p_render_list, RenderListParameters *p_params);
+
+	void create_surface_blases(void *p_surface, LocalVector<LocalVector<RID>> &p_surface_lod_blas_map, LocalVector<Transform3D> &p_local_transforms);
 	void build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type);
+	const LocalVector<Transform3D> surfaces_get_local_transforms(void *p_surface);
 	uint32_t surface_get_lod_level(RenderDataRD *p_render_data, GeometryInstanceForwardClustered *p_inst);
 
 private:

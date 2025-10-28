@@ -131,7 +131,7 @@ public:
 	void set_lightmap_size_hint(const Size2i &p_size);
 	Size2i get_lightmap_size_hint() const;
 
-	bool has_mesh() const;
+	bool blas_map_has_mesh() const;
 	Ref<ArrayMesh> get_mesh(const Ref<ArrayMesh> &p_base = Ref<ArrayMesh>());
 	void clear();
 };

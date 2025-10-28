@@ -714,13 +714,13 @@ bool MeshInstance3DEditorPlugin::handles(Object *p_object) const {
 	Ref<MultiNodeEdit> mne = Ref<MultiNodeEdit>(p_object);
 	Node *edited_scene = EditorNode::get_singleton()->get_edited_scene();
 	if (mne.is_valid() && edited_scene) {
-		bool has_mesh = false;
+		bool blas_map_has_mesh = false;
 		for (int i = 0; i < mne->get_node_count(); i++) {
 			if (Object::cast_to<MeshInstance3D>(edited_scene->get_node(mne->get_node(i)))) {
-				if (has_mesh) {
+				if (blas_map_has_mesh) {
 					return true;
 				} else {
-					has_mesh = true;
+					blas_map_has_mesh = true;
 				}
 			}
 		}

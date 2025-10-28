@@ -544,7 +544,7 @@ void ImporterMesh::_generate_lods_bind(float p_normal_merge_angle, float p_norma
 	generate_lods(p_normal_merge_angle, p_skin_pose_transform_array);
 }
 
-bool ImporterMesh::has_mesh() const {
+bool ImporterMesh::blas_map_has_mesh() const {
 	return mesh.is_valid();
 }
 

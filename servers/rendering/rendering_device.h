@@ -805,7 +805,7 @@ public:
 	};
 
 	enum StorageBufferUsage {
-		STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT = (1 << 0),
+		STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT = (1 << 0)
 	};
 
 	RID vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
@@ -1243,13 +1243,15 @@ private:
 	struct AccelerationStructure {
 		RDD::AccelerationStructureID driver_id;
 		RDD::AccelerationStructureType type = RDD::ACCELERATION_STRUCTURE_TYPE_BLAS;
-		RDD::BufferID scratch_buffer;
+		//RDD::BufferID scratch_buffer;
 		RDG::ResourceTracker *draw_tracker = nullptr;
 
 		RID vertex_array;
 		RID index_array;
 		RID transform_buffer;
-		RID instances_buffer;
+		//RID instances_buffer;
+
+		Vector<RID> blases;
 	};
 
 	RID_Owner<InstancesBuffer, true> instances_buffer_owner;
@@ -1259,31 +1261,35 @@ private:
 	// The order is: Mesh<LoDs<Surface BLASes>>
 	AHashMap<RID, LocalVector<LocalVector<RID>>> mesh_blases_map;
 
-public:
-	enum AccelerationStructureGeometryType {
-		STATIC,
-		DYNAMIC
-	};
+	LocalVector<RID> error_rid_vector;
 
 	LocalVector<RID> static_blases;
 	RID static_tlas;
 	LocalVector<RID> dynamic_blases;
 	RID dynamic_tlas;
 
+	RID _tlas_create(const TypedArray<RID> &p_blases);
+public:
+	enum AccelerationStructureGeometryType {
+		STATIC,
+		DYNAMIC
+	};
+
 	enum GeometryBits {
 		GEOMETRY_OPAQUE = (1 << 0),
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	bool has_mesh(RID p_mesh_rid);
+	bool blas_map_has_mesh(RID p_mesh_rid);
 	void blases_add_to_map(RID p_mesh_rid, LocalVector<LocalVector<RID>> &p_blases);
 	LocalVector<RID> &get_type_blases(AccelerationStructureGeometryType p_type);
-	RID &tlas_get_type(AccelerationStructureGeometryType p_type);
+	RID tlas_get_type(AccelerationStructureGeometryType p_type);
+	void tlas_set_type(AccelerationStructureGeometryType p_type, RID p_tlas);
 	LocalVector<RID> blases_get_or_null(RID p_mesh_rid, uint32_t p_lod);
-	RID blas_create(RID p_vertex_array, RID p_index_array, BitField<GeometryBits> p_geobits);
+	RID blas_create(RID p_vertex_array, RID p_index_array, RID p_transform_buffer, uint64_t p_transform_offset);
 	RID tlas_instances_buffer_create(uint32_t p_instance_count, BitField<BufferCreationBits> p_creation_bits);
 	void tlas_instances_buffer_fill(RID p_instances_buffer, const Vector<RID> &p_blasses, const Vector<Transform3D> &p_transforms);
-	RID tlas_create(RID p_instances_buffer);
+	RID tlas_create(const Vector<RID> &p_blases /*RID p_instances_buffer*/);
 	Error acceleration_structure_build(RID p_acceleration_structure);
 
 	/*************************/

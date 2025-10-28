@@ -5207,7 +5207,7 @@ RDD::PipelineID RenderingDeviceDriverD3D12::render_pipeline_create(
 
 // ---- ACCELERATION STRUCTURES ----
 
-RDD::AccelerationStructureID RenderingDeviceDriverD3D12::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) {
+RDD::AccelerationStructureID RenderingDeviceDriverD3D12::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BufferID p_transform_buffer, uint64_t p_transform_offset) {
 	// TODO
 	ERR_FAIL_V_MSG(AccelerationStructureID(), "Unimplemented!");
 }
@@ -5222,7 +5222,7 @@ void RenderingDeviceDriverD3D12::tlas_instances_buffer_fill(BufferID p_instances
 	ERR_FAIL_MSG("Unimplemented");
 }
 
-RDD::AccelerationStructureID RenderingDeviceDriverD3D12::tlas_create(BufferID p_instance_buffer) {
+RDD::AccelerationStructureID RenderingDeviceDriverD3D12::tlas_create(const LocalVector<AccelerationStructureID> &p_blases) {
 	// TODO
 	ERR_FAIL_V_MSG(AccelerationStructureID(), "Unimplemented!");
 }
@@ -5230,11 +5230,6 @@ RDD::AccelerationStructureID RenderingDeviceDriverD3D12::tlas_create(BufferID p_
 void RenderingDeviceDriverD3D12::acceleration_structure_free(AccelerationStructureID p_acceleration_structure) {
 	// TODO
 	ERR_FAIL_MSG("Unimplemented!");
-}
-
-uint32_t RenderingDeviceDriverD3D12::acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) {
-	// TODO
-	ERR_FAIL_V_MSG(0, "Unimplemented!");
 }
 
 // ----- PIPELINE -----

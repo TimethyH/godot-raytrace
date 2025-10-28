@@ -786,11 +786,27 @@ void RenderForwardClustered::_update_instance_data_buffer(RenderListType p_rende
 		RD::get_singleton()->buffer_update(scene_state.instance_buffer[p_render_list], 0, sizeof(SceneState::InstanceData) * scene_state.instance_data[p_render_list].size(), scene_state.instance_data[p_render_list].ptr());
 	}
 }
+void RendererSceneRenderImplementation::RenderForwardClustered::_update_transform_data_buffer(RenderListType p_render_list) {
+	if (scene_state.transform_data[p_render_list].size() > 0) {
+		if (scene_state.transform_buffer[p_render_list] == RID() || scene_state.transform_buffer_size[p_render_list] < scene_state.transform_data[p_render_list].size()) {
+			if (scene_state.transform_buffer[p_render_list] != RID()) {
+				RD::get_singleton()->free(scene_state.transform_buffer[p_render_list]);
+			}
+			uint32_t new_size = nearest_power_of_2_templated(MAX(uint64_t(INSTANCE_DATA_BUFFER_MIN_SIZE), scene_state.transform_data[p_render_list].size()));
+			BitField<RD::BufferCreationBits> buffer_creation = (RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT | RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+			scene_state.transform_buffer[p_render_list] = RD::get_singleton()->storage_buffer_create(new_size * sizeof(SceneState::TransformData), {}, {}, buffer_creation);
+			scene_state.transform_buffer_size[p_render_list] = new_size;
+		}
+		RD::get_singleton()->buffer_update(scene_state.transform_buffer[p_render_list], 0, sizeof(SceneState::TransformData) * scene_state.transform_data[p_render_list].size(), scene_state.transform_data[p_render_list].ptr());
+	}
+}
+
 void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, int *p_render_info, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
 	RenderList *rl = &render_list[p_render_list];
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
 
 	scene_state.instance_data[p_render_list].resize(p_offset + element_total);
+	scene_state.transform_data[p_render_list].resize(p_offset + element_total);
 	rl->element_info.resize(p_offset + element_total);
 
 	if (p_render_info) {
@@ -804,10 +820,12 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		GeometryInstanceForwardClustered *inst = surface->owner;
 
 		SceneState::InstanceData &instance_data = scene_state.instance_data[p_render_list][i + p_offset];
+		SceneState::TransformData &transform_data = scene_state.transform_data[p_render_list][i + p_offset];
 
 		if (likely(inst->store_transform_cache)) {
 			RendererRD::MaterialStorage::store_transform(inst->transform, instance_data.transform);
 			RendererRD::MaterialStorage::store_transform(inst->prev_transform, instance_data.prev_transform);
+			RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->transform, transform_data.transform);
 
 #ifdef REAL_T_IS_DOUBLE
 			// Split the origin into two components, the float approximation and the missing precision.
@@ -819,6 +837,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		} else {
 			RendererRD::MaterialStorage::store_transform(Transform3D(), instance_data.transform);
 			RendererRD::MaterialStorage::store_transform(Transform3D(), instance_data.prev_transform);
+			RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), transform_data.transform);
 		}
 
 		instance_data.flags = inst->flags_cache;
@@ -875,6 +894,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 	if (p_update_buffer) {
 		_update_instance_data_buffer(p_render_list);
+		_update_transform_data_buffer(p_render_list);
 	}
 }
 
@@ -1677,26 +1697,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	static const int texture_multisamples[RS::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
-#ifdef RAYTRACING_TEST
-	static int first_run = 0;
-	if (first_run >= 1) {
-		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
-
-		static bool first = true;
-		if (first) {
-			raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
-			first = false;
-		} else {
-			raytracing_rd.setup_uniform_data(rb->get_internal_texture(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
-		}
-	}
-
-	if (first_run < 1) {
-		first_run++;
-	}
-
-//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
-#endif
 	//first of all, make a new render pass
 	//fill up ubo
 
@@ -1894,6 +1894,34 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	_fill_instance_data(RENDER_LIST_OPAQUE, render_info);
 	_fill_instance_data(RENDER_LIST_MOTION, render_info);
 	_fill_instance_data(RENDER_LIST_ALPHA, render_info);
+
+#ifdef RAYTRACING_TEST
+	static int first_run = 0;
+	const int frame_to_start = 100;
+	if (first_run >= frame_to_start) {
+		//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
+
+		SceneShaderForwardClustered::ShaderSpecialization raytracing_base_specialization = scene_shader.default_specialization;
+
+		RenderListParameters raytracing_render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, RID(), get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, raytracing_base_specialization);
+		_tlas_create(RENDER_LIST_OPAQUE, &raytracing_render_list_params);
+
+		RID tlas = scene_state.tlas;
+		static bool first = true;
+		if (first && tlas.is_valid()) {
+			raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), tlas);
+			first = false;
+		} else if (tlas.is_valid()) {
+			raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlas);
+		}
+	}
+
+	if (first_run < frame_to_start) {
+		first_run++;
+	}
+
+//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
+#endif
 
 	RD::get_singleton()->draw_command_end_label();
 
@@ -2220,7 +2248,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 #else
-	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
+	RID tlasID = scene_state.tlas;
 
 	RENDER_TIMESTAMP("Raytracing");
 
@@ -2255,11 +2283,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 
+		// Build BLASs
+		for (RID blas : scene_state.blass) {
+			RD::get_singleton()->acceleration_structure_build(blas);
+		}
+		// Build TLASs
+		RD::get_singleton()->acceleration_structure_build(scene_state.tlas);
+
 		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
 
 		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), tlasID);
 
-		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
+		raytracing_rd.trace_rays(tlasID, RID(), LID, rb->get_internal_size());
 
 		RD::get_singleton()->raytracing_list_end();
 
@@ -3870,21 +3905,66 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
-LocalVector<LocalVector<RID>> RenderForwardClustered::create_surface_blases(void *p_surface) {
+void RendererSceneRenderImplementation::RenderForwardClustered::_tlas_create(RenderListType p_render_list, RenderListParameters *p_params) {
+	// Clear structures from previous frame
+	for (const RID &blas : scene_state.blass) {
+		RD::get_singleton()->free(blas);
+	}
+	scene_state.blass.clear();
+	if (scene_state.tlas != RID()) {
+		RD::get_singleton()->free(scene_state.tlas);
+	}
+
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+
+	// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
+	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
+			(1 << RS::ARRAY_NORMAL) | (1 << RS::ARRAY_TEX_UV) |
+			(1 << RS::ARRAY_INDEX);
+
+	for (int i = 0; i < p_params->element_count; i++) {
+		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
+		const RenderElementInfo &element_info = p_params->element_info[i];
+
+		void *mesh_surface = surf->surface;
+
+		RD::VertexFormatID vertex_format = -1;
+		RID vertex_array_rd;
+		RID index_array_rd;
+
+		// Motion vectors not yet implemented
+		if (surf->owner->mesh_instance.is_valid()) {
+			mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, false, vertex_array_rd, vertex_format);
+		} else {
+			mesh_storage->mesh_surface_get_vertex_arrays_and_format(mesh_surface, input_mask, false, vertex_array_rd, vertex_format);
+		}
+
+		index_array_rd = mesh_storage->mesh_surface_get_index_array(mesh_surface, element_info.lod_index);
+
+		RID transform_buffer = scene_state.transform_buffer[p_render_list];
+		uint64_t transform_offset = i * sizeof(SceneState::TransformData);
+		scene_state.blass.push_back(RD::get_singleton()->blas_create(vertex_array_rd, index_array_rd, transform_buffer, transform_offset));
+	}
+
+	// After creating the BLASs we can create the TLAS.
+	// Create the TLAS even with no BLASs, so that uniform binding would not fail.
+	scene_state.tlas = RD::get_singleton()->tlas_create(scene_state.blass);
+}
+
+void RenderForwardClustered::create_surface_blases(void *p_surface, LocalVector<LocalVector<RID>> &p_surface_lod_blas_map, LocalVector<Transform3D> &p_local_transforms) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	GeometryInstanceSurfaceDataCache *surf = reinterpret_cast<GeometryInstanceSurfaceDataCache *>(p_surface);
 
 	// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
 	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
-			(1 << RS::ARRAY_NORMAL) |
+			(1 << RS::ARRAY_NORMAL) | (1 << RS::ARRAY_TEX_UV) |
 			(1 << RS::ARRAY_INDEX);
 
 	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
 	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
 
 	uint32_t lod_count = mesh_storage->mesh_surface_get_lod_count(surf->surface);
-	LocalVector<LocalVector<RID>> new_blases;
-	new_blases.resize(lod_count + 1);
+	p_surface_lod_blas_map.resize(lod_count + 1);
 
 	//int first_surface = 0;
 	while (surf != nullptr) {
@@ -3894,7 +3974,7 @@ LocalVector<LocalVector<RID>> RenderForwardClustered::create_surface_blases(void
 		//	surf = surf->next;
 		//	//first_surface++;
 
-		//	print_line(vformat("Surface: %d", first_surface));
+		//	//print_line(vformat("Surface: %d", first_surface));
 
 		//	continue;
 		//}
@@ -3904,33 +3984,36 @@ LocalVector<LocalVector<RID>> RenderForwardClustered::create_surface_blases(void
 			RID vertex_array;
 			RenderingDevice::VertexFormatID vertex_format;
 
-			mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
-
+			if (surf->owner->mesh_instance.is_valid()) {
+				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, false, vertex_array, vertex_format);
+			} else {
+				mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
+			}
 			if (vertex_array.is_null()) {
 				ERR_PRINT("No valid triangle surfaces found for BLAS creation");
-				return new_blases;
+				return;
 			}
 
+#if 0
 			RID blas = RD::get_singleton()->blas_create(
 					vertex_array,
 					index_array,
 					geometry_bits);
-
-			new_blases[i].push_back(blas);
+			p_surface_lod_blas_map[i].push_back(blas);
+#endif
 		}
+		p_local_transforms.push_back(mesh_storage->mesh_surface_get_local_transform(surf->surface));
 
-		//surf = surf->next;
-		break;
+		surf = surf->next;
+		//break;
+		continue;
 	}
-
-	return new_blases;
 }
 
 void RenderForwardClustered::build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type) {
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 
 	LocalVector<RID> &blases = rd->get_type_blases(p_type);
-	RID &tlas = rd->tlas_get_type(p_type);
 
 	LocalVector<RID> tlas_blases;
 	LocalVector<RID> created_blases;
@@ -3957,9 +4040,9 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		GeometryInstanceForwardClustered *inst =
 				static_cast<GeometryInstanceForwardClustered *>(geom);
 
-		if (!inst->surface_caches || inst->surface_caches->primitive != RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES) {
+		/*if (!inst->surface_caches || inst->surface_caches->primitive != RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES) {
 			continue;
-		}
+		}*/
 
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = inst->transform;
@@ -3986,8 +4069,10 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		//raytracing_rd.update_material_data(buffer);
 
 		// Build BLAS for unique meshes
-		if (!rd->has_mesh(mesh_rid)) {
-			LocalVector<LocalVector<RID>> new_blases = create_surface_blases(inst->surface_caches);
+		if (!rd->blas_map_has_mesh(mesh_rid)) {
+			LocalVector<LocalVector<RID>> new_blases;
+			LocalVector<Transform3D> new_local_transforms;
+			create_surface_blases(inst->surface_caches, new_blases, new_local_transforms);
 
 			if (new_blases.size() > 0) {
 				rd->blases_add_to_map(mesh_rid, new_blases);
@@ -3998,7 +4083,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			// blas & transform vectors need to be of equal length for the driver
 			for (uint64_t j = 0; j < new_blases[lod].size(); ++j) {
 				tlas_blases.push_back(new_blases[lod][j]);
-				transforms.push_back(world_transform);
+				transforms.push_back(world_transform * new_local_transforms[j]);
 			}
 
 			for (uint64_t j = 0; j < new_blases.size(); ++j) {
@@ -4008,11 +4093,14 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			}
 		} else {
 			LocalVector<RID> new_blases = rd->blases_get_or_null(mesh_rid, surface_get_lod_level(p_render_data, inst)); // No check needed because of if-statement
+			LocalVector<Transform3D> local_transforms = surfaces_get_local_transforms(inst->surface_caches);
+
+			DEV_ASSERT(new_blases.size() == local_transforms.size());
 
 			// blas & transform vectors need to be of equal length for the driver
 			for (uint64_t j = 0; j < new_blases.size(); ++j) {
 				tlas_blases.push_back(new_blases[j]);
-				transforms.push_back(world_transform);
+				transforms.push_back(world_transform * local_transforms[j]);
 			}
 		}
 
@@ -4024,7 +4112,8 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		return;
 	}
 
-	// This prevents the local blases from overwriting the current acceleration structure if the new structure is invalid
+	// This prevents the local blases from overwriting the current
+	// ration structure if the new structure is invalid
 	blases.clear(); // Maybe free blases?
 	blases = tlas_blases;
 
@@ -4039,8 +4128,25 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	RID tlas_instances_buffer = rd->tlas_instances_buffer_create(blases.size(), creation_bits);
 	rd->tlas_instances_buffer_fill(tlas_instances_buffer, blases, transforms);
 
+	RID tlas = rd->tlas_get_type(p_type);
+#if 0
 	tlas = rd->tlas_create(tlas_instances_buffer);
+#endif
+	rd->tlas_set_type(p_type, tlas);
+
 	rd->acceleration_structure_build(tlas);
+}
+
+const LocalVector<Transform3D> RendererSceneRenderImplementation::RenderForwardClustered::surfaces_get_local_transforms(void *p_surface) {
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	GeometryInstanceSurfaceDataCache *surf = reinterpret_cast<GeometryInstanceSurfaceDataCache *>(p_surface);
+
+	LocalVector<Transform3D> local_transforms;
+	while (surf != nullptr) {
+		local_transforms.push_back(mesh_storage->mesh_surface_get_local_transform(surf->surface));
+		surf = surf->next;
+	}
+	return local_transforms;
 }
 
 // Derived from: RenderForwardClustered::_fill_render_list()

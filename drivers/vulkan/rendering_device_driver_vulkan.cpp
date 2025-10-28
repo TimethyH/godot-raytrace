@@ -1771,7 +1771,7 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_STORAGE_BIT, VK_BUFFER_USAGE_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDEX_BIT, VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_VERTEX_BIT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDIRECT_BIT, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
-static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
+static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_SHADER_BINDING_TABLE_BIT, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR));
 
@@ -1900,6 +1900,10 @@ void RenderingDeviceDriverVulkan::buffer_unmap(BufferID p_buffer) {
 }
 
 uint64_t RenderingDeviceDriverVulkan::buffer_get_device_address(BufferID p_buffer) {
+	if (!p_buffer) {
+		return 0;
+	}
+
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
 	VkBufferDeviceAddressInfo address_info = {};
 	address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -5499,20 +5503,19 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_OPAQUE, VK_GEOMETRY_OPAQUE_BIT_KHR));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
 
-RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) {
+RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BufferID p_transform_buffer, uint64_t p_transform_offset) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
 	// Vertex positions is first buffer.
 	const VertexFormatInfo *vf_info = (const VertexFormatInfo *)p_vertex_format.id;
 	VkDeviceSize buffer_offset = vf_info->vk_attributes[0].offset;
 
 	VkDeviceAddress vertex_address = buffer_get_device_address(p_vertex_buffer) + buffer_offset;
-
-	VkDeviceAddress index_address = 0;
+	VkDeviceAddress index_address = buffer_get_device_address(p_index_buffer) + p_index_offset_bytes;
+	VkDeviceAddress transform_address = buffer_get_device_address(p_transform_buffer) + p_transform_offset;
 
 	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
 
 	if (p_index_buffer) {
-		index_address = buffer_get_device_address(p_index_buffer) + p_index_offset_bytes;
 		accel_info->geometry.geometry.triangles.indexType = p_index_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
 		accel_info->geometry.geometry.triangles.indexData.deviceAddress = index_address;
 	} else {
@@ -5527,12 +5530,12 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(BufferID p
 	accel_info->geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
 	accel_info->geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
 	// Keep in mind that this avoids invoking the any hit shader.
-	accel_info->geometry.flags = p_geometry_bits;
+	accel_info->geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
 	accel_info->geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
 	accel_info->geometry.geometry.triangles.vertexFormat = vertex_format;
 	accel_info->geometry.geometry.triangles.vertexData.deviceAddress = vertex_address;
 	accel_info->geometry.geometry.triangles.vertexStride = vertex_stride;
-	accel_info->geometry.geometry.triangles.transformData.deviceAddress = 0;
+	accel_info->geometry.geometry.triangles.transformData.deviceAddress = transform_address;
 	// Number of vertices in vertexData minus one, aka max vertex index.
 	accel_info->geometry.geometry.triangles.maxVertex = max_vertex;
 
@@ -5623,16 +5626,48 @@ void RenderingDeviceDriverVulkan::tlas_instances_buffer_fill(BufferID p_instance
 #endif
 }
 
-RDD::AccelerationStructureID RenderingDeviceDriverVulkan::tlas_create(BufferID p_instances_buffer) {
+RDD::AccelerationStructureID RenderingDeviceDriverVulkan::tlas_create(const LocalVector<AccelerationStructureID> &p_blases) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
-	ERR_FAIL_COND_V(p_instances_buffer == BufferID(), AccelerationStructureID());
-
 	AccelerationStructureInfo *accel_info = VersatileResource::allocate<AccelerationStructureInfo>(resources_allocator);
+
+	for (uint32_t i = 0; i < p_blases.size(); ++i) {
+		const AccelerationStructureID &blas = p_blases[i];
+		AccelerationStructureInfo *blas_info = (AccelerationStructureInfo *)blas.id;
+
+		VkTransformMatrixKHR transform = { {
+				{ 1.0, 0.0, 0.0, 0.0 },
+				{ 0.0, 1.0, 0.0, 0.0 },
+				{ 0.0, 0.0, 1.0, 0.0 },
+		} };
+
+		VkAccelerationStructureInstanceKHR instance = {};
+		instance.transform = transform;
+		instance.instanceCustomIndex = i;
+		instance.mask = 0xFF;
+		instance.accelerationStructureReference = buffer_get_device_address(blas_info->buffer);
+		instance.instanceShaderBindingTableRecordOffset = 0;
+		instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+
+		accel_info->instances.push_back(instance);
+	}
+
+	uint32_t instance_count = accel_info->instances.size();
+	VkDeviceAddress instances_buffer_address = 0;
+
+	if (instance_count > 0) {
+		uint32_t instances_size = instance_count * sizeof(accel_info->instances[0]);
+		accel_info->instances_buffer = buffer_create(instances_size, BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT | BUFFER_USAGE_TRANSFER_FROM_BIT, MEMORY_ALLOCATION_TYPE_CPU);
+		uint8_t *data_ptr = buffer_map(accel_info->instances_buffer);
+		ERR_FAIL_NULL_V(data_ptr, AccelerationStructureID());
+		memcpy(data_ptr, accel_info->instances.ptr(), instances_size);
+		buffer_unmap(accel_info->instances_buffer);
+		instances_buffer_address = buffer_get_device_address(accel_info->instances_buffer);
+	}
 
 	accel_info->geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
 	accel_info->geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
 	accel_info->geometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-	accel_info->geometry.geometry.instances.data.deviceAddress = buffer_get_device_address(p_instances_buffer);
+	accel_info->geometry.geometry.instances.data.deviceAddress = instances_buffer_address;
 
 	accel_info->build_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	accel_info->build_info.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
@@ -5641,7 +5676,7 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::tlas_create(BufferID p
 	accel_info->build_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	accel_info->build_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 
-	uint32_t instance_count = buffer_get_allocation_size(p_instances_buffer) / sizeof(VkAccelerationStructureInstanceKHR);
+	//uint32_t instance_count = buffer_get_allocation_size(p_instances_buffer) / sizeof(VkAccelerationStructureInstanceKHR);
 	VkAccelerationStructureBuildSizesInfoKHR size_info = {};
 	size_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 	vkGetAccelerationStructureBuildSizesKHR(vk_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &accel_info->build_info, &instance_count, &size_info);
@@ -5654,27 +5689,21 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::tlas_create(BufferID p
 #endif
 }
 
-#if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
-static VkDeviceAddress _align_up_address(VkDeviceAddress address, VkDeviceAddress alignment) {
-	return (address + (alignment - 1)) & ~(alignment - 1);
-}
-#endif
-
 void RenderingDeviceDriverVulkan::_acceleration_structure_create(VkAccelerationStructureTypeKHR p_type, VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_accel_info) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
-	RDD::BufferID buffer = buffer_create(p_size_info.accelerationStructureSize, RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT | RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU);
+	RDD::BufferID buffer = buffer_create(p_size_info.accelerationStructureSize, RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT | RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU);
 	r_accel_info->buffer = buffer;
 
-	// Scratch address must be a multiple of minAccelerationStructureScratchOffsetAlignment.
-	r_accel_info->scratch_alignment = acceleration_structure_capabilities.min_acceleration_structure_scratch_offset_alignment;
-	r_accel_info->scratch_size = p_size_info.buildScratchSize + r_accel_info->scratch_alignment;
+	RDD::BufferID scratch_buffer = buffer_create(p_size_info.buildScratchSize, RDD::BUFFER_USAGE_STORAGE_BIT | RDD::BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU);
+	r_accel_info->scratch_buffer = scratch_buffer;
+	r_accel_info->build_info.scratchData.deviceAddress = buffer_get_device_address(scratch_buffer);
 
-	VkAccelerationStructureCreateInfoKHR accel_create_info = {};
-	accel_create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-	accel_create_info.type = p_type;
-	accel_create_info.size = p_size_info.accelerationStructureSize;
-	accel_create_info.buffer = ((const BufferInfo *)buffer.id)->vk_buffer;
-	VkResult err = vkCreateAccelerationStructureKHR(vk_device, &accel_create_info, nullptr, &r_accel_info->vk_acceleration_structure);
+	VkAccelerationStructureCreateInfoKHR blas_create_info = {};
+	blas_create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	blas_create_info.type = p_type;
+	blas_create_info.size = p_size_info.accelerationStructureSize;
+	blas_create_info.buffer = ((const BufferInfo *)buffer.id)->vk_buffer;
+	VkResult err = vkCreateAccelerationStructureKHR(vk_device, &blas_create_info, nullptr, &r_accel_info->vk_acceleration_structure);
 	ERR_FAIL_COND_MSG(err, "vkCreateAccelerationStructureKHR failed with error " + itos(err) + ".");
 	r_accel_info->build_info.dstAccelerationStructure = r_accel_info->vk_acceleration_structure;
 #endif
@@ -5683,9 +5712,11 @@ void RenderingDeviceDriverVulkan::_acceleration_structure_create(VkAccelerationS
 void RenderingDeviceDriverVulkan::acceleration_structure_free(AccelerationStructureID p_acceleration_structure) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
 	AccelerationStructureInfo *accel_info = (AccelerationStructureInfo *)p_acceleration_structure.id;
-	ERR_FAIL_NULL_MSG(accel_info, "Acceleration structure input parameter is not valid.");
 	if (accel_info->instances_buffer) {
 		buffer_free(accel_info->instances_buffer);
+	}
+	if (accel_info->scratch_buffer) {
+		buffer_free(accel_info->scratch_buffer);
 	}
 	if (accel_info->buffer) {
 		buffer_free(accel_info->buffer);
@@ -5697,26 +5728,13 @@ void RenderingDeviceDriverVulkan::acceleration_structure_free(AccelerationStruct
 #endif
 }
 
-uint32_t RenderingDeviceDriverVulkan::acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) {
-	AccelerationStructureInfo *accel_info = (AccelerationStructureInfo *)p_acceleration_structure.id;
-	ERR_FAIL_NULL_V_MSG(accel_info, 0, "Acceleration structure input parameter is not valid.");
-	return accel_info->scratch_size;
-}
-
 // ----- COMMANDS -----
 
 void RenderingDeviceDriverVulkan::command_build_acceleration_structure(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) {
 #if !(defined(MACOS_ENABLED) || defined(IOS_ENABLED))
-	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
-	AccelerationStructureInfo *accel_info = (AccelerationStructureInfo *)p_acceleration_structure.id;
-
-	VkAccelerationStructureBuildGeometryInfoKHR *build_info = &accel_info->build_info;
-	VkDeviceAddress scratch_address = buffer_get_device_address(p_scratch_buffer);
-	build_info->scratchData.deviceAddress = _align_up_address(scratch_address, accel_info->scratch_alignment);
-
+	const AccelerationStructureInfo *accel_info = (const AccelerationStructureInfo *)p_acceleration_structure.id;
 	const VkAccelerationStructureBuildRangeInfoKHR *range_info_ptr = &accel_info->range_info;
-
-	vkCmdBuildAccelerationStructuresKHR(command_buffer->vk_command_buffer, 1, build_info, &range_info_ptr);
+	vkCmdBuildAccelerationStructuresKHR((VkCommandBuffer)p_cmd_buffer.id, 1, &accel_info->build_info, &range_info_ptr);
 #endif
 }
 
@@ -5780,7 +5798,6 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 		}
 	}
 
-
 	// Groups.
 	pipeline_create_info.groupCount = shader_info->vk_groups_create_info.size();
 	VkRayTracingShaderGroupCreateInfoKHR *vk_pipeline_groups = ALLOCA_ARRAY(VkRayTracingShaderGroupCreateInfoKHR, pipeline_create_info.groupCount);
@@ -5843,7 +5860,7 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 	// Create shader binding table buffer
 	rpi->sbt_buffer = buffer_create(
 			sbt_size,
-			BUFFER_USAGE_TRANSFER_FROM_BIT | BUFFER_USAGE_DEVICE_ADDRESS_BIT | BUFFER_USAGE_SHADER_BINDING_TABLE_BIT,
+			BUFFER_USAGE_TRANSFER_FROM_BIT | BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | BUFFER_USAGE_SHADER_BINDING_TABLE_BIT,
 			MEMORY_ALLOCATION_TYPE_CPU);
 
 	// Get base device address
@@ -5899,7 +5916,6 @@ VkResult RenderingDeviceDriverVulkan::_raytracing_pipeline_stb_create(Raytracing
 		sbt_data += rpi->regions.miss.stride;
 		++handle_index;
 	}
-
 
 	buffer_unmap(rpi->sbt_buffer);
 

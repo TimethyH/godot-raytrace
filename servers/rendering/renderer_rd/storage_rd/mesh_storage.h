@@ -471,6 +471,11 @@ public:
 		return s->aabb;
 	}
 
+	_FORCE_INLINE_ Transform3D mesh_surface_get_local_transform(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->mesh_to_skeleton_xform;
+	}
+
 	_FORCE_INLINE_ uint64_t mesh_surface_get_format(void *p_surface) {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 		return s->format;

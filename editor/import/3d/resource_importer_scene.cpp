@@ -2611,7 +2611,7 @@ Node *ResourceImporterScene::_generate_meshes(Node *p_node, const Dictionary &p_
 		Ref<ImporterMesh> importer_mesh = src_mesh_node->get_mesh();
 		if (importer_mesh.is_valid()) {
 			Ref<ArrayMesh> mesh;
-			if (!importer_mesh->has_mesh()) {
+			if (!importer_mesh->blas_map_has_mesh()) {
 				//do mesh processing
 
 				bool generate_lods = p_generate_lods;

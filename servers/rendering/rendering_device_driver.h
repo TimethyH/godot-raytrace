@@ -169,7 +169,7 @@ public:
 		BUFFER_USAGE_VERTEX_BIT = (1 << 7),
 		BUFFER_USAGE_INDIRECT_BIT = (1 << 8),
 		BUFFER_USAGE_SHADER_BINDING_TABLE_BIT = (1 << 10),
-		BUFFER_USAGE_DEVICE_ADDRESS_BIT = (1 << 17),
+		BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT = (1 << 17),
 		BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 19),
 		BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT = (1 << 20)
 	};
@@ -574,12 +574,11 @@ public:
 		GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION = (1 << 1),
 	};
 
-	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) = 0;
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset, uint32_t p_index_count, BufferID p_transform_buffer, uint64_t p_transform_offset) = 0;
 	virtual uint32_t tlas_instances_buffer_get_size_bytes(uint32_t p_instance_count) = 0;
 	virtual void tlas_instances_buffer_fill(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blases, const Vector<Transform3D> &p_transforms) = 0;
-	virtual AccelerationStructureID tlas_create(BufferID p_instances_buffer) = 0;
+	virtual AccelerationStructureID tlas_create(const LocalVector<AccelerationStructureID> &p_blases) = 0;
 	virtual void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) = 0;
-	virtual uint32_t acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) = 0;
 
 	// ----- PIPELINE -----
 

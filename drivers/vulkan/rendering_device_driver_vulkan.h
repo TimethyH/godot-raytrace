@@ -664,10 +664,8 @@ public:
 		// Buffer used for the structure
 		RDD::BufferID buffer;
 
-		// Aligmnent of the scratch buffer for building the structure
-		uint32_t scratch_alignment;
-		// Size of the scratch buffer for building the structure
-		uint32_t scratch_size;
+		// Buffer used for building the structure
+		RDD::BufferID scratch_buffer;
 
 		// Buffer used for instances in a TLAS
 		RDD::BufferID instances_buffer;
@@ -679,12 +677,11 @@ public:
 		VkAccelerationStructureBuildRangeInfoKHR range_info;
 	};
 
-	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BitField<GeometryBits> p_geometry_bits) override final;
+	virtual AccelerationStructureID blas_create(BufferID p_vertex_buffer, uint64_t p_vertex_offset, VertexFormatID p_vertex_format, uint32_t p_vertex_count, BufferID p_index_buffer, IndexBufferFormat p_index_format, uint64_t p_index_offset_bytes, uint32_t p_index_count, BufferID p_transform_buffer, uint64_t p_transform_offset) override final;
 	virtual uint32_t tlas_instances_buffer_get_size_bytes(uint32_t p_instance_count) override final;
 	virtual void tlas_instances_buffer_fill(BufferID p_instances_buffer, const LocalVector<AccelerationStructureID> &p_blases, const Vector<Transform3D> &p_transforms) override final;
-	virtual AccelerationStructureID tlas_create(BufferID p_instances_buffer) override final;
+	virtual AccelerationStructureID tlas_create(const LocalVector<AccelerationStructureID> &p_blases) override final;
 	virtual void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) override final;
-	virtual uint32_t acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) override final;
 
 private:
 	void _acceleration_structure_create(VkAccelerationStructureTypeKHR p_type, VkAccelerationStructureBuildSizesInfoKHR p_size_info, AccelerationStructureInfo *r_accel_info);
