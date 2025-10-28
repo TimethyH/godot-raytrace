@@ -24,7 +24,7 @@ public:
 	void update_buffer(const Projection& p_inv_view_proj, const Transform3D& cam_pos);
 	void setup_uniform_data(RID render_targe, RID tlas);
 
-	void set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& index);
+	void set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& p_index);
 	void upload_material_data();
 	void upload_addresses();
 
