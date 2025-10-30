@@ -12,7 +12,7 @@ struct hitPayload
 {
   vec3 hitValue;
   int  depth;
-  vec3 attenuation;
+  float attenuation;
   int  done;
   vec3 rayOrigin;
   vec3 rayDir;
@@ -68,6 +68,7 @@ void main(){
 
 	// Initialize prd values
 	prd.hitValue = imageLoad(image, pixCoords).xyz;
+	prd.attenuation = 1.0f;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeEXT.xy);
@@ -112,8 +113,6 @@ void main(){
 		{
 			float previous_weight = 1.0f;
 
-			
-
 			traceRayEXT(tlas,
 			gl_RayFlagsOpaqueEXT,
 			0xFF,
@@ -141,7 +140,7 @@ void main(){
 
 	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(decoded_normals, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
@@ -164,7 +163,7 @@ void main(){
 struct hitPayload {
   vec3 hitValue;
   int  depth;
-  vec3 attenuation;
+  float attenuation;
   int  done;
   vec3 rayOrigin;
   vec3 rayDir;
@@ -261,10 +260,7 @@ void main() {
         albedo = tex_color; // Usually multiply with base color
   }
 
-  if (mat.metallic_texture_index > 0) {
-        float tex_color = texture(albedo_texture[mat.metallic_texture_index], uv).b;
-        metallic = tex_color;
-  }
+
 
 	prd.hitValue = albedo;
 
@@ -282,7 +278,7 @@ struct hitPayload
 {
   vec3 hitValue;
   int  depth;
-  vec3 attenuation;
+  float attenuation;
   int  done;
   vec3 rayOrigin;
   vec3 rayDir;

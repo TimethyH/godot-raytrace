@@ -284,6 +284,9 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i
 	push_constant_bytes.resize(sizeof(RayPushConstant));
 	memcpy(push_constant_bytes.ptrw(), &ray_push_constant, sizeof(RayPushConstant));
 
+	//RD::get_singleton()->acceleration_structure_build(blas);
+	//RD::get_singleton()->acceleration_structure_build(tlas);
+
 	RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
 
 	// Bind resources
