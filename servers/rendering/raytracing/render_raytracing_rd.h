@@ -67,9 +67,6 @@ private:
 		uint32_t normal_texture_index = 0;
 		uint32_t metallic_texture_index = 0;
 		uint32_t roughness_texture_index = 0; // 4x4 = 16
-
-		float normal[3] = { 0.0f, 0.0f, 0.0f };
-		float metallic = 0.0f;
 	};
 
 	struct RaytracingShader {

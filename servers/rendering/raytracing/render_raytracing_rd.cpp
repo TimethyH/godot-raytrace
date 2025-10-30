@@ -177,13 +177,6 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 		mat_data.albedo[2] = albedo.b;
 		mat_data.albedo[3] = albedo.a;
 
-		mat_data.metallic = p_material_storage->material_get_param(p_material, "metallic");
-
-		Vector3 normal = p_material_storage->material_get_param(p_material, "normal");
-		mat_data.normal[0] = normal.x;
-		mat_data.normal[1] = normal.y;
-		mat_data.normal[2] = normal.z;
-
 		TextureStorage *texture_storage = TextureStorage::get_singleton();
 		if (default_texture_set == false) {
 			RID default_white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);

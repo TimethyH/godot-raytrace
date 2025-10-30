@@ -107,13 +107,12 @@ void main(){
 	vec4 origin = vec4(world_pos + R * 1e-4, 1.0);
 	vec4 direction = vec4(R, 0);
 
-	prd.attenuation *= metallic;
-
-	if(prd.attenuation > 0.01){
-		
+	if(metallic > 0.01){
 		// Iterative loop for the reflections
 		while(depth < 1) // TODO remove hardcoded value with vulkan recursion limit
 		{
+			float previous_weight = 1.0f;
+
 			traceRayEXT(tlas,
 			gl_RayFlagsOpaqueEXT,
 			0xFF,
@@ -127,7 +126,7 @@ void main(){
 			0
 			);
 
-			accumulated_color += prd.hitValue * vec3(prd.attenuation);
+			accumulated_color += prd.hitValue * previous_weight;
 
 			depth++;
 		}
@@ -141,7 +140,7 @@ void main(){
 
 	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(decoded_normals, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
@@ -173,11 +172,9 @@ struct hitPayload {
 struct MaterialData {
   vec4 color;
   uint albedo_texture_index;
-  uint normal_texture_index;
-  uint metallic_texture_index;
-  uint roughness_texture_index;
-  vec3 normal;
-  float metallic;
+  uint dummy;
+  uint dummy2;
+  uint dummy3;
 };
 
 // ===== Constants for current layout =====
@@ -239,8 +236,8 @@ void main() {
 
   MaterialData mat = material.materials[mat_index];
   vec3 albedo = mat.color.rgb;
-  vec3 normal = mat.normal.xyz;
-  float metallic = mat.metallic;
+  vec3 normal = vec3(0);
+  float metallic = 0;
   float roughness = 0;
   
   VertexData uvData   = VertexData(uv_addr);
@@ -263,11 +260,8 @@ void main() {
         albedo = tex_color; // Usually multiply with base color
   }
 
-  if (mat.metallic_texture_index > 0) { // Check if texture is valid
-        //metallic = texture(albedo_texture[mat.metallic_texture_index], uv).b;
-  }
 
-	//prd.attenuation *= metallic;
+
 	prd.hitValue = albedo;
 
 }
