@@ -38,6 +38,7 @@
 #include "core/variant/variant.h"
 #include "servers/display_server.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/raytracing/renderer_ray_trace_settings.h"
 
 // Helper macros for code outside of the rendering server, but that is
 // called by the rendering server.
@@ -218,6 +219,7 @@ public:
 		SHADER_PARTICLES,
 		SHADER_SKY,
 		SHADER_FOG,
+		SHADER_RAYTRACING,
 		SHADER_MAX
 	};
 

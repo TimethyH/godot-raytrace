@@ -40,11 +40,23 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 
+#if defined(VULKAN_ENABLED)
+#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+#endif
+#if defined(METAL_ENABLED)
+#include "drivers/metal/rendering_context_driver_metal.h"
+#endif
+
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
+
 using namespace RendererSceneRenderImplementation;
 
 #define PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION 1
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
+
+#define RAYTRACING_TEST
 
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
@@ -1471,8 +1483,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	p_render_data->shadows.clear();
 	p_render_data->directional_shadows.clear();
 
+	bool raytraced_shadows = RendererRayTraceSettings::get_singleton()->get_shadows();
+
 	float lod_distance_multiplier = p_render_data->scene_data->cam_projection.get_lod_multiplier();
-	{
+	if (!raytraced_shadows) {
 		for (int i = 0; i < p_render_data->render_shadow_count; i++) {
 			RID li = p_render_data->render_shadows[i].light;
 			RID base = light_storage->light_instance_get_base_light(li);
@@ -1502,7 +1516,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	// Render GI
 
-	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
+	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size() && !raytraced_shadows;
 	bool render_gi = rb.is_valid() && p_use_gi;
 
 	if (render_shadows && render_gi) {
@@ -1570,7 +1584,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		current_cluster_builder->begin(p_render_data->scene_data->cam_transform, p_render_data->scene_data->cam_projection, !p_render_data->reflection_probe.is_valid());
 	}
 
-	bool using_shadows = true;
+	bool using_shadows = !raytraced_shadows;
 
 	if (p_render_data->reflection_probe.is_valid()) {
 		if (!RSG::light_storage->reflection_probe_renders_shadows(light_storage->reflection_probe_instance_get_probe(p_render_data->reflection_probe))) {
@@ -1663,6 +1677,33 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	static const int texture_multisamples[RS::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
+#ifdef RAYTRACING_TEST
+	static int first_run = 0;
+	if (first_run == 20) {
+		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+
+		RID normal_texture;
+		if (rb_data.is_valid()) {
+			if (!rb_data->has_normal_roughness()) {
+				rb_data->ensure_normal_roughness_texture();
+			}
+			normal_texture = rb_data->get_normal_roughness();
+		}
+
+		// Fallback to default if still not available
+		if (normal_texture.is_null()) {
+			normal_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
+		}
+
+		raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), normal_texture, RID(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
+	}
+
+	if (first_run <= 20) {
+		first_run++;
+	}
+//build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
+#endif
 	//first of all, make a new render pass
 	//fill up ubo
 
@@ -1772,7 +1813,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::MaterialStorage::Samplers samplers;
 
 	PassMode depth_pass_mode = PASS_MODE_DEPTH;
+	
 	uint32_t color_pass_flags = 0;
+
 	Vector<Color> depth_pass_clear;
 	bool using_separate_specular = false;
 	bool using_ssr = false;
@@ -1781,6 +1824,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0;
 	bool using_ssil = !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssil_enabled(p_render_data->environment);
 	bool using_motion_pass = rb_data.is_valid() && using_upscaling;
+
+		#ifdef RAYTRACING_TEST
+	depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
+	color_pass_flags |= COLOR_PASS_FLAG_SEPARATE_SPECULAR;
+	using_separate_specular = true;
+#endif
 
 	if (is_reflection_probe) {
 		uint32_t resolution = light_storage->reflection_probe_instance_get_resolution(p_render_data->reflection_probe);
@@ -2117,6 +2166,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
+
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -2184,6 +2234,65 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}
+
+	RID tlasID = RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC);
+
+	RENDER_TIMESTAMP("Raytracing");
+
+	if (tlasID != RID()) {
+
+		p_render_data->scene_data->flip_y = true;
+		Projection view = Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+		Projection proj_view = p_render_data->scene_data->get_cam_projection() * view;
+		//p_render_data->scene_data->flip_y = false;
+		//Projection inv_proj_view = p_render_data->scene_data->get_cam_projection() * p_render_data->scene_data->get_view_projection(0);
+
+		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform);
+
+		RD::get_singleton()->draw_command_begin_label("Trace rays");
+
+		RD::RaytracingListID LID = RD::get_singleton()->raytracing_list_begin();
+		//Ref<RenderBufferDataForwardClustered> rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+
+		RID normal_texture;
+		if (rb_data.is_valid()) {
+			if (!rb_data->has_normal_roughness()) {
+				rb_data->ensure_normal_roughness_texture();
+			}
+			normal_texture = rb_data->get_normal_roughness();
+		}
+
+		if (normal_texture.is_null()) {
+			normal_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_NORMAL);
+		}
+
+		RID depth_texture;
+		if (rb.is_valid() && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
+			depth_texture = rb->get_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH);
+		} else if (rb.is_valid() && rb->has_depth_texture()) {
+			depth_texture = rb->get_depth_texture();
+		} else {
+			depth_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
+		}
+
+		RID specular_texture;
+		if (rb_data.is_valid() && rb_data->has_specular()) {
+			specular_texture = rb_data->get_specular();
+		} else {
+			// Fallback to default texture
+			specular_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+		}
+
+		raytracing_rd.setup_uniform_data(rb->get_internal_texture(), normal_texture, depth_texture, specular_texture, tlasID);
+
+		raytracing_rd.trace_rays(RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC), RID(), LID, rb->get_internal_size());
+
+		RD::get_singleton()->raytracing_list_end();
+
+		RD::get_singleton()->draw_command_end_label();
+	}
+
 
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -2353,6 +2462,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	RD::get_singleton()->draw_command_begin_label("Render 3D Transparent Pass");
 
+#ifdef RAYTRACING_TEST
+	//RID rp_uniform_set;
+#endif
 	rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, radiance_texture, samplers, true);
 
 	_setup_environment(p_render_data, is_reflection_probe, screen_size, p_default_bg_color, false);
@@ -3783,6 +3895,151 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+}
+
+RID RenderForwardClustered::surface_create_blas(void *p_surface) {
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	GeometryInstanceSurfaceDataCache *surf = reinterpret_cast<GeometryInstanceSurfaceDataCache *>(p_surface);
+
+	if (surf == nullptr) {
+		return RID();
+	}
+
+	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
+	RID vertex_array;
+	RenderingDevice::VertexFormatID vertex_format;
+
+	// TODO: Input mask is hardcoded right now, normally it should be shader->get_vertex_input_mask()
+	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
+			(1 << RS::ARRAY_NORMAL) |
+			(1 << RS::ARRAY_TEX_UV) |
+			(1 << RS::ARRAY_INDEX);
+
+	mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, vertex_format);
+
+	if (vertex_array.is_null()) {
+		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
+		return RID();
+	}
+
+	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
+	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
+
+	return RD::get_singleton()->blas_create(
+			vertex_array,
+			index_array,
+			geometry_bits);
+}
+
+void RenderForwardClustered::build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type) {
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+
+	LocalVector<RID> &blases = rd->get_type_blases(p_type);
+	RID &tlas = rd->tlas_get_type(p_type);
+
+	LocalVector<RID> local_blases;
+	LocalVector<Transform3D> transforms;
+
+	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
+	uint32_t material_index = 0;
+	uint32_t address_id = 0;
+	// Iterate ALL instances in the scenario
+	for (uint64_t i = 0; i < instance_data.size(); i++) {
+		RendererSceneCull::InstanceData &idata = instance_data[i];
+
+		// Check if it's geometry
+		uint32_t base_type = idata.flags & RendererSceneCull::InstanceData::FLAG_BASE_TYPE_MASK;
+		if (!((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK)) {
+			continue; // Skip non-geometry (lights, probes, etc.)
+		}
+
+		// Skip instances that don't cast shadows
+		// (there is helper geometry placed at the origin of the scene which gets hit by our raytracer
+		// This causes unexpected issues with material indexing)
+		if (!(idata.flags & RendererSceneCull::InstanceData::FLAG_CAST_SHADOWS)) {
+			continue;
+		}
+
+		// Access the geometry instance
+		RenderGeometryInstance *geom = idata.instance_geometry;
+		GeometryInstanceForwardClustered *inst =
+				static_cast<GeometryInstanceForwardClustered *>(geom);
+
+		if (!inst->surface_caches || inst->surface_caches->primitive != RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES) {
+			continue;
+		}
+
+		RID mesh_rid = idata.base_rid;
+		Transform3D world_transform = geom->get_transform();
+
+
+		if (mesh_rid.is_valid()) {
+			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+			RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+			uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
+			for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
+				RID material = inst->data->surface_materials[surface_index];
+
+				if (!material.is_valid()) {
+					material = mesh_storage->mesh_surface_get_material(mesh_rid, surface_index);
+				}
+
+				if (inst->data->material_override.is_valid()) {
+					material = inst->data->material_override;
+				}
+
+				if (!material.is_valid()) {
+					continue; // No material on this surface
+				}
+				
+				raytracing_rd.set_material_data(material, material_storage, material_index);
+			}
+		}
+
+		// Build BLAS for unique meshes
+		if (!rd->has_blas(mesh_rid)) {
+			RID new_blas = surface_create_blas(inst->surface_caches);
+			local_blases.push_back(new_blas);
+			rd->blas_add_to_map(mesh_rid, new_blas);
+			transforms.push_back(world_transform);
+		} else {
+			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
+			local_blases.push_back(new_blas);
+			transforms.push_back(world_transform);
+		}
+		// The data in the shader assumes this layout. vertex, index, uv.
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.vertex_adresses[address_id]);
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.index_adresses[address_id]);
+		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.uv_adresses[address_id]);
+		address_id++;
+	}
+
+	raytracing_rd.upload_material_data();
+	raytracing_rd.upload_addresses();
+	
+
+	// Maybe error message?
+	if (local_blases.size() <= 0) {
+		return;
+	}
+
+	// This prevents the local blases from overwriting the current acceleration structure if the new structure is invalid
+	blases.clear(); // Maybe free blases?
+	blases = local_blases;
+
+	for (int64_t i = 0; i < blases.size(); ++i) {
+		rd->acceleration_structure_build(blases[i]);
+	}
+
+	// CHECK: Flags might be incorrect.
+	BitField<RenderingDevice::BufferCreationBits> creation_bits;
+	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+	RID tlas_instances_buffer = rd->tlas_instances_buffer_create(blases.size(), creation_bits);
+	rd->tlas_instances_buffer_fill(tlas_instances_buffer, blases, transforms);
+
+	tlas = rd->tlas_create(tlas_instances_buffer);
+	rd->acceleration_structure_build(tlas);
 }
 
 RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {

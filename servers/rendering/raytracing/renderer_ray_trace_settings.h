@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_server_globals.cpp                                          */
+/*  renderer_ray_trace_settings.h                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,24 +28,22 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "rendering_server_globals.h"
+#pragma once
 
-bool RenderingServerGlobals::threaded = false;
+#include "core/object/object.h"
 
-RendererUtilities *RenderingServerGlobals::utilities = nullptr;
-RendererLightStorage *RenderingServerGlobals::light_storage = nullptr;
-RendererMaterialStorage *RenderingServerGlobals::material_storage = nullptr;
-RendererMeshStorage *RenderingServerGlobals::mesh_storage = nullptr;
-RendererParticlesStorage *RenderingServerGlobals::particles_storage = nullptr;
-RendererTextureStorage *RenderingServerGlobals::texture_storage = nullptr;
-RendererGI *RenderingServerGlobals::gi = nullptr;
-RendererFog *RenderingServerGlobals::fog = nullptr;
-RendererCameraAttributes *RenderingServerGlobals::camera_attributes = nullptr;
-RendererCanvasRender *RenderingServerGlobals::canvas_render = nullptr;
-RendererCompositor *RenderingServerGlobals::rasterizer = nullptr;
+class RendererRayTraceSettings : public Object {
+public:
+	RendererRayTraceSettings();
+	virtual ~RendererRayTraceSettings() {}
 
-RendererCanvasCull *RenderingServerGlobals::canvas = nullptr;
-RendererViewport *RenderingServerGlobals::viewport = nullptr;
-RenderingMethod *RenderingServerGlobals::scene = nullptr;
+	bool get_shadows() const;
+	void set_shadows(bool p_enable);
 
-RendererRayTraceSettings *RenderingServerGlobals::ray_trace_settings = nullptr;
+	static RendererRayTraceSettings *get_singleton();
+
+private:
+	static RendererRayTraceSettings *singleton;
+
+	bool enable_shadows = false;
+};

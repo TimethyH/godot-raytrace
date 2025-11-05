@@ -35,6 +35,8 @@
 #include "rendering_light_culler.h"
 #include "rendering_server_default.h"
 
+#include "raytracing/renderer_ray_trace_settings.h"
+
 #if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
 // This is used only to obtain node paths for user-friendly physics interpolation warnings.
 #include "scene/main/node.h"
@@ -2704,7 +2706,8 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	bool using_shadows = !RendererRayTraceSettings::get_singleton()->get_shadows();
+	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, using_shadows, r_render_info);
 #endif
 }
 
@@ -2824,6 +2827,8 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 
 	Transform3D inv_cam_transform = cull_data.cam_transform.inverse();
 	float z_near = cull_data.camera_matrix->get_z_near();
+
+	cull_result.instance_data_before_culling = &cull_data.scenario->instance_data;
 
 	for (uint64_t i = p_from; i < p_to; i++) {
 		bool mesh_visible = false;
@@ -3100,10 +3105,10 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
+	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
+
 	// Prepare the light - camera volume culling system.
 	light_culler->prepare_camera(p_camera_data->main_transform, p_camera_data->main_projection);
-
-	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
 
 	ERR_FAIL_COND(p_render_buffers.is_null());
@@ -3483,16 +3488,18 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, &scene_cull_result, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
 	}
 
-	for (uint32_t i = 0; i < max_shadows_used; i++) {
-		render_shadow_data[i].instances.clear();
+	if (p_using_shadows) {
+		for (uint32_t i = 0; i < max_shadows_used; i++) {
+			render_shadow_data[i].instances.clear();
+		}
+		max_shadows_used = 0;
 	}
-	max_shadows_used = 0;
 
 	for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 		render_sdfgi_data[i].instances.clear();
@@ -3550,7 +3557,7 @@ void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_rend
 	RendererSceneRender::CameraData camera_data;
 	camera_data.set_camera(Transform3D(), Projection(), true, false, false);
 
-	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, nullptr, environment, RID(), compositor, p_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
 #endif
 }
 

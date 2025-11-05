@@ -889,6 +889,7 @@ public:
 		PagedArray<RID> voxel_gi_instances;
 		PagedArray<RID> mesh_instances;
 		PagedArray<RID> fog_volumes;
+		PagedArray<InstanceData> *instance_data_before_culling = nullptr; // raytracing
 
 		struct DirectionalShadow {
 			PagedArray<RenderGeometryInstance *> cascade_geometry_instances[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];

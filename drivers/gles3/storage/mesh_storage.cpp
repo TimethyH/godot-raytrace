@@ -34,6 +34,7 @@
 #include "config.h"
 #include "texture_storage.h"
 #include "utilities.h"
+#include "mesh_storage.h"
 
 using namespace GLES3;
 

@@ -38,6 +38,8 @@
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+#include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
+
 namespace RendererRD {
 
 class MeshStorage : public RendererMeshStorage {
@@ -73,6 +75,7 @@ private:
 
 	struct MeshInstance;
 
+	friend class RenderForwardClustered;
 	struct Mesh {
 		struct Surface {
 			RS::PrimitiveType primitive = RS::PRIMITIVE_POINTS;
@@ -364,6 +367,7 @@ public:
 
 	/* MESH API */
 
+	Mesh *get_mesh(RID p_rid) { return mesh_owner.get_or_null(p_rid); }
 	bool owns_mesh(RID p_rid) { return mesh_owner.owns(p_rid); }
 
 	virtual RID mesh_allocate() override;
@@ -400,6 +404,8 @@ public:
 
 	virtual void mesh_set_path(RID p_mesh, const String &p_path) override;
 	virtual String mesh_get_path(RID p_mesh) const override;
+
+	RID surface_get_index_array(void *p_surface) const;
 
 	virtual void mesh_clear(RID p_mesh) override;
 	virtual void mesh_surface_remove(RID p_mesh, int p_surface) override;

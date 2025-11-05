@@ -886,7 +886,7 @@ Ref<RenderingShaderContainer> RenderingShaderContainerFormatD3D12::create_contai
 
 RenderingDeviceCommons::ShaderLanguageVersion RenderingShaderContainerFormatD3D12::get_shader_language_version() const {
 	// NIR-DXIL is Vulkan 1.1-conformant.
-	return SHADER_LANGUAGE_VULKAN_VERSION_1_1;
+	return SHADER_LANGUAGE_VULKAN_VERSION_1_4;
 }
 
 RenderingDeviceCommons::ShaderSpirvVersion RenderingShaderContainerFormatD3D12::get_shader_spirv_version() const {

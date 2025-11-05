@@ -3,6 +3,8 @@ from misc.utility.scons_hints import *
 
 Import("env")
 
+env.add_source_files(env.servers_sources, "*.cpp")
+
 if "RD_GLSL" in env["BUILDERS"]:
     # find just the include files
     gl_include_files = [str(f) for f in Glob("*_inc.glsl")]
@@ -20,9 +22,3 @@ if "RD_GLSL" in env["BUILDERS"]:
     # compile RD shader
     for glsl_file in glsl_files:
         env.RD_GLSL(glsl_file)
-
-SConscript("effects/SCsub")
-SConscript("environment/SCsub")
-SConscript("forward_clustered/SCsub")
-SConscript("forward_mobile/SCsub")
-SConscript("raytracing/SCsub")

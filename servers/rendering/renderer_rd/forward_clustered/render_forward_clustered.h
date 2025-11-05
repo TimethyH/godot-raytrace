@@ -45,6 +45,8 @@
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
+#include "servers/rendering/raytracing/render_raytracing_rd.h"
+
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
 
 #define RB_TEX_SPECULAR SNAME("specular")
@@ -780,6 +782,37 @@ protected:
 	virtual void _render_uv2(const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) override;
 	virtual void _render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffers, const Vector3i &p_from, const Vector3i &p_size, const AABB &p_bounds, const PagedArray<RenderGeometryInstance *> &p_instances, const RID &p_albedo_texture, const RID &p_emission_texture, const RID &p_emission_aniso_texture, const RID &p_geom_facing_texture, float p_exposure_normalization) override;
 	virtual void _render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) override;
+
+public:
+	/* Raytracing */
+
+	struct RaySceneState {
+		struct UBO {
+			float combined_reprojection[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 128
+			float view_inv_projections[RendererSceneRender::MAX_RENDER_VIEWS][16]; // 2 x 64 - 256
+			float view_eye_offsets[RendererSceneRender::MAX_RENDER_VIEWS][4]; // 2 x 16 - 288
+
+			float z_near; // 4 - 292
+			float z_far; // 4 - 296
+		};
+
+		UBO ubo;
+
+		RID render_target;
+	};
+
+	RID surface_create_blas(void *p_surface);
+	void build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type);
+
+private:
+	// 128 is the max size of a push constant.
+	struct rayPushConstant {
+		float clear_color[3] = { 1.0f, 0.0f, 0.0f }; // 12
+	};
+
+	rayPushConstant ray_pc;
+
+	RendererRD::RaytraceRD raytracing_rd;
 
 public:
 	static RenderForwardClustered *get_singleton() { return singleton; }

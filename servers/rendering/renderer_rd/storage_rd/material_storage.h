@@ -103,6 +103,8 @@ public:
 		bool update_parameters_uniform_set(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty, const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const Vector<ShaderCompiler::GeneratedCode::Texture> &p_texture_uniforms, const HashMap<StringName, HashMap<int, RID>> &p_default_texture_params, uint32_t p_ubo_size, RID &r_uniform_set, RID p_shader, uint32_t p_shader_uniform_set, bool p_use_linear_color, bool p_3d_material);
 		void free_parameters_uniform_set(RID p_uniform_set);
 
+		RID get_uniform_buffer() { return uniform_buffer[1]; } // TODO this might be illegal, find another way to retrieve the data.
+
 	private:
 		friend class MaterialStorage;
 
