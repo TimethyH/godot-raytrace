@@ -101,11 +101,7 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 				print_error("Invalid texture!");
 				u.append_id(sampler);
 				u.append_id(textures[0]); // default white
-				u.append_id(sampler);
-				u.append_id(textures[0]);
 			} else {
-				u.append_id(sampler);
-				u.append_id(textures[i]);
 				u.append_id(sampler);
 				u.append_id(textures[i]);
 			}
