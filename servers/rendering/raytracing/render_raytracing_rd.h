@@ -26,7 +26,7 @@ public:
 	void update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos);
 	void setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas);
 
-	void set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &index);
+	void set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& p_index);
 	void upload_material_data();
 	void upload_addresses();
 

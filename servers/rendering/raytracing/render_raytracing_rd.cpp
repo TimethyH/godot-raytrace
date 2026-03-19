@@ -90,8 +90,6 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 				RS::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
 
 		// albedo texture
-		// TODO for now hardcoded to index 1 (albedo id) since its too late.
-		// TODO make it upload the correct textures and sample them with correct UVs
 		RD::Uniform u;
 		u.binding = 4;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
@@ -119,9 +117,7 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		RD::Uniform u;
 		u.binding = 5;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		//for (const RID& vertex : vertices) {
 		u.append_id(address_buffer);
-		//}
 		uniforms.push_back(u);
 	}
 
@@ -167,7 +163,7 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
 
-void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &index) {
+void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index) {
 	if (!material_to_index.has(p_material)) {
 		MaterialData mat_data;
 
@@ -180,7 +176,7 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 		TextureStorage *texture_storage = TextureStorage::get_singleton();
 		if (default_texture_set == false) {
 			RID default_white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
-			textures.push_back(default_white); // index 0 is used for default.
+			textures.push_back(default_white); // p_index 0 is used for default.
 			default_texture_set = true;
 		}
 		// Albedo
@@ -241,7 +237,7 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 		}
 
 		materials.push_back(mat_data);
-		material_to_index[p_material] = index++;
+		material_to_index[p_material] = p_index++;
 	}
 }
 
