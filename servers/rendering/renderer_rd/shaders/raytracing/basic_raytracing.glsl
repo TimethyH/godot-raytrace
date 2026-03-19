@@ -13,9 +13,10 @@ struct hitPayload
   vec3 hitValue;
   int  depth;
   float attenuation;
+  float metallic;
   int  done;
-  vec3 rayOrigin;
-  vec3 rayDir;
+  vec4 rayOrigin;
+  vec4 rayDir;
 };
 
 struct MaterialData {
@@ -86,7 +87,7 @@ void main(){
 	decoded_normals = encoded_normal.xyz * 2.0f - 1.0f;
 	decoded_normals = normalize(mat3(ubo.data.inverseView) * decoded_normals);
 
-	float metallic = texelFetch(specular, pixCoords, 0).w;
+	prd.metallic = texelFetch(specular, pixCoords, 0).w;
 
 	float depth_color = texelFetch(depth, pixCoords, 0).r;
 
@@ -103,11 +104,12 @@ void main(){
 	vec3 R = reflect(-V, decoded_normals);
 
 	vec3 accumulated_color = prd.hitValue;
+	prd.attenuation = 1.0f * prd.metallic;
 
-	vec4 origin = vec4(world_pos + R * 1e-4, 1.0);
-	vec4 direction = vec4(R, 0);
+	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
+	prd.rayDir = vec4(R, 0);
 
-	if(metallic > 0.01){
+	if(prd.metallic > 0.01){
 		// Iterative loop for the reflections
 		while(depth < 1) // TODO remove hardcoded value with vulkan recursion limit
 		{
@@ -119,28 +121,20 @@ void main(){
 			0,
 			0,
 			0,
-			origin.xyz,
+			prd.rayOrigin.xyz,
 			t_min,
-			direction.xyz,
+			prd.rayDir.xyz,
 			t_max,
 			0
 			);
 
-			accumulated_color += prd.hitValue * previous_weight;
-
+			accumulated_color += prd.hitValue * prd.attenuation;
+			prd.attenuation *= prd.metallic; // reduce attenuation depending on the metallic value of the material
 			depth++;
 		}
 	}
-	
 
-	//vec4 target = vec4(d.x, d.y, 1.0, 1.0);
-	
-	
-	
-
-	//normal_roughness.xyz = normalize(normal_roughness.xyz * 2 - 1);
-
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(decoded_normals, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }
@@ -164,9 +158,10 @@ struct hitPayload {
   vec3 hitValue;
   int  depth;
   float attenuation;
+  float metallic;
   int  done;
-  vec3 rayOrigin;
-  vec3 rayDir;
+  vec4 rayOrigin;
+  vec4 rayDir;
 };
 
 struct MaterialData {
@@ -228,6 +223,8 @@ void main() {
   // Barycentrics from hit attributes
   vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
+  //vec3 hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+
   // get addresses
   uint mat_index = gl_InstanceCustomIndexEXT;
   uint64_t vertex_addr = addresses.address[mat_index * 3 + 0];
@@ -260,8 +257,6 @@ void main() {
         albedo = tex_color; // Usually multiply with base color
   }
 
-
-
 	prd.hitValue = albedo;
 
 }
@@ -279,9 +274,10 @@ struct hitPayload
   vec3 hitValue;
   int  depth;
   float attenuation;
+  float metallic;
   int  done;
-  vec3 rayOrigin;
-  vec3 rayDir;
+  vec4 rayOrigin;
+  vec4 rayDir;
 };
 
 layout(location = 0) rayPayloadInEXT hitPayload prd;

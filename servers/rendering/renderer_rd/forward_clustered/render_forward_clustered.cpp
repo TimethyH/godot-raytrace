@@ -1813,7 +1813,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::MaterialStorage::Samplers samplers;
 
 	PassMode depth_pass_mode = PASS_MODE_DEPTH;
-	
+
 	uint32_t color_pass_flags = 0;
 
 	Vector<Color> depth_pass_clear;
@@ -1825,7 +1825,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_ssil = !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssil_enabled(p_render_data->environment);
 	bool using_motion_pass = rb_data.is_valid() && using_upscaling;
 
-		#ifdef RAYTRACING_TEST
+#ifdef RAYTRACING_TEST
 	depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 	color_pass_flags |= COLOR_PASS_FLAG_SEPARATE_SPECULAR;
 	using_separate_specular = true;
@@ -2166,7 +2166,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
-
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -2240,7 +2239,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Raytracing");
 
 	if (tlasID != RID()) {
-
 		p_render_data->scene_data->flip_y = true;
 		Projection view = Projection(p_render_data->scene_data->cam_transform.affine_inverse());
 		Projection proj_view = p_render_data->scene_data->get_cam_projection() * view;
@@ -2292,7 +2290,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_end_label();
 	}
-
 
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -3972,7 +3969,6 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = geom->get_transform();
 
-
 		if (mesh_rid.is_valid()) {
 			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 			RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
@@ -3991,7 +3987,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 				if (!material.is_valid()) {
 					continue; // No material on this surface
 				}
-				
+
 				raytracing_rd.set_material_data(material, material_storage, material_index);
 			}
 		}
@@ -4002,21 +3998,23 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			local_blases.push_back(new_blas);
 			rd->blas_add_to_map(mesh_rid, new_blas);
 			transforms.push_back(world_transform);
+			address_id++;
 		} else {
 			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
 			local_blases.push_back(new_blas);
 			transforms.push_back(world_transform);
 		}
+
+		auto &gpuAdress = RD::get_singleton()->gpu_addresses;
+
 		// The data in the shader assumes this layout. vertex, index, uv.
-		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.vertex_adresses[address_id]);
-		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.index_adresses[address_id]);
-		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.uv_adresses[address_id]);
-		address_id++;
+		raytracing_rd.add_address(gpuAdress.vertex_adresses[address_id - 1]);
+		raytracing_rd.add_address(gpuAdress.index_adresses[address_id - 1]);
+		raytracing_rd.add_address(gpuAdress.uv_adresses[address_id - 1]);
 	}
 
 	raytracing_rd.upload_material_data();
 	raytracing_rd.upload_addresses();
-	
 
 	// Maybe error message?
 	if (local_blases.size() <= 0) {
