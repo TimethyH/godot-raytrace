@@ -13,7 +13,6 @@
 
 namespace RendererRD {
 void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_cam_pos, RID p_render_buffer, RID p_render_buffer_normal, RID p_render_buffer_specular, RID p_tlas) {
-
 	Vector<String> variants;
 	variants.push_back(" ");
 	raytracing_shader.shader.initialize(variants);
@@ -41,7 +40,6 @@ void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Projecti
 }
 
 void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas) {
-	
 	Vector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -86,10 +84,10 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 	}
 
 	{
-		MaterialStorage* material_storage = MaterialStorage::get_singleton();
+		MaterialStorage *material_storage = MaterialStorage::get_singleton();
 		RID sampler = material_storage->sampler_rd_get_default(
-			RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR,
-			RS::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+				RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR,
+				RS::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
 
 		// albedo texture
 		// TODO for now hardcoded to index 1 (albedo id) since its too late.
@@ -97,19 +95,21 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		RD::Uniform u;
 		u.binding = 4;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-		for (const RID& tex : textures) {
-			if (!tex.is_valid()) {
+		for (int i = 0; i < static_cast<int>(textures.size()); i++) {
+			if (!RD::get_singleton()->texture_is_valid(textures[i])) {
+				print_error(vformat("Texture %d is invalid RD texture", i));
+			}
+			if (!textures[i].is_valid()) {
 				print_error("Invalid texture!");
 				u.append_id(sampler);
 				u.append_id(textures[0]); // default white
 				u.append_id(sampler);
 				u.append_id(textures[0]);
-			}
-			else {
+			} else {
 				u.append_id(sampler);
-				u.append_id(tex);
+				u.append_id(textures[i]);
 				u.append_id(sampler);
-				u.append_id(tex);
+				u.append_id(textures[i]);
 			}
 		}
 		uniforms.push_back(u);
@@ -159,7 +159,7 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		u.binding = 9;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
 		RID sampler = samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-		
+
 		u.append_id(sampler);
 		uniforms.push_back(u);
 	}
@@ -288,6 +288,10 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i
 	//RD::get_singleton()->acceleration_structure_build(tlas);
 
 	RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
+
+	 if(!ray_scene_state.uniform_set.is_valid()) {
+		print_error(vformat("Uniform set is not valid"));
+	}
 
 	// Bind resources
 	RD::get_singleton()->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);

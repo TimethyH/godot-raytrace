@@ -3992,25 +3992,29 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			}
 		}
 
+		auto &gpuAdress = RD::get_singleton()->gpu_addresses;
+
 		// Build BLAS for unique meshes
 		if (!rd->has_blas(mesh_rid)) {
 			RID new_blas = surface_create_blas(inst->surface_caches);
 			local_blases.push_back(new_blas);
 			rd->blas_add_to_map(mesh_rid, new_blas);
 			transforms.push_back(world_transform);
+
+			raytracing_rd.add_address(gpuAdress.vertex_adresses[address_id]);
+			raytracing_rd.add_address(gpuAdress.index_adresses[address_id]);
+			raytracing_rd.add_address(gpuAdress.uv_adresses[address_id]);
 			address_id++;
 		} else {
 			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
 			local_blases.push_back(new_blas);
 			transforms.push_back(world_transform);
+
+			uint32_t existing_id = mesh_to_address_id[mesh_rid.get_id()];
+			raytracing_rd.add_address(gpuAdress.vertex_adresses[existing_id]);
+			raytracing_rd.add_address(gpuAdress.index_adresses[existing_id]);
+			raytracing_rd.add_address(gpuAdress.uv_adresses[existing_id]);
 		}
-
-		auto &gpuAdress = RD::get_singleton()->gpu_addresses;
-
-		// The data in the shader assumes this layout. vertex, index, uv.
-		raytracing_rd.add_address(gpuAdress.vertex_adresses[address_id - 1]);
-		raytracing_rd.add_address(gpuAdress.index_adresses[address_id - 1]);
-		raytracing_rd.add_address(gpuAdress.uv_adresses[address_id - 1]);
 	}
 
 	raytracing_rd.upload_material_data();

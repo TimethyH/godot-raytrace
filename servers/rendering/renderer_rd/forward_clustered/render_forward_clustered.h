@@ -813,6 +813,7 @@ private:
 	rayPushConstant ray_pc;
 
 	RendererRD::RaytraceRD raytracing_rd;
+	std::unordered_map<uint64_t, uint32_t> mesh_to_address_id;
 
 public:
 	static RenderForwardClustered *get_singleton() { return singleton; }

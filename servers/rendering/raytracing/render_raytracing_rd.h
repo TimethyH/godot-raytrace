@@ -11,6 +11,8 @@
 
 #include "servers/rendering/renderer_rd/shaders/raytracing/basic_raytracing.glsl.gen.h"
 
+#include <unordered_map>
+
 namespace RendererRD {
 
 // Forward declare RendererSceneRenderRD so we can pass it into some of our methods, these classes are pretty tightly bound
@@ -24,11 +26,11 @@ public:
 	void update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos);
 	void setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas);
 
-	void set_material_data(RID p_material, MaterialStorage* p_material_storage, uint32_t& index);
+	void set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &index);
 	void upload_material_data();
 	void upload_addresses();
 
-	void add_address(const uint64_t& address);
+	void add_address(const uint64_t &address);
 
 	~RaytraceRD();
 
@@ -41,7 +43,7 @@ public:
 			float align;
 			float inv_view_proj[16]; // 64
 			float inv_view[16]; // 64
-			
+
 			//float z_near; // 4 - 292
 			//float z_far; // 4 - 296
 		};
@@ -52,7 +54,7 @@ public:
 		RID uniform_set;
 
 		RID render_target;
-	}ray_scene_state;
+	} ray_scene_state;
 
 private:
 	// 128 is the max size of a push constant.
@@ -62,7 +64,7 @@ private:
 
 	// Ideally this struct holds material data which gets sent to the GPU..
 	struct MaterialData {
-		float albedo[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // 16
+		float albedo[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // 16
 		uint32_t albedo_texture_index = 0;
 		uint32_t normal_texture_index = 0;
 		uint32_t metallic_texture_index = 0;
@@ -79,7 +81,6 @@ private:
 		RID default_shader_rd;
 		RID version;
 	} raytracing_shader;
-
 
 	RID raytrace_pipeline;
 

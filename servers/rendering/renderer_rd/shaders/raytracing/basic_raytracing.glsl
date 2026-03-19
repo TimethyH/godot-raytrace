@@ -191,7 +191,7 @@ layout(set = 0, binding = 3) buffer MaterialBuffer {
   MaterialData materials[];
 } material;
 
-layout(set = 0, binding = 4) uniform sampler2D albedo_texture[2];
+layout(set = 0, binding = 4) uniform sampler2D albedo_texture[32];
 
 layout(set = 0, binding = 5) readonly buffer AddressBuffer {
   uint64_t address[];
