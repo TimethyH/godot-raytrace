@@ -4016,21 +4016,16 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 			uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
 			for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
-				RID material = inst->data->surface_materials[surface_index];
-
+				RID material = inst->data->surface_materials.size() > 0 ? inst->data->surface_materials[0] : RID();
 				if (!material.is_valid()) {
-					material = mesh_storage->mesh_surface_get_material(mesh_rid, surface_index);
+					material = mesh_storage->mesh_surface_get_material(mesh_rid, 0);
 				}
-
 				if (inst->data->material_override.is_valid()) {
 					material = inst->data->material_override;
 				}
-
-				if (!material.is_valid()) {
-					continue; // No material on this surface
+				if (material.is_valid()) {
+					raytracing_rd.set_material_data(material, material_storage, material_index);
 				}
-
-				raytracing_rd.set_material_data(material, material_storage, material_index);
 			}
 		}
 
@@ -4043,9 +4038,12 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 			rd->blas_add_to_map(mesh_rid, new_blas);
 			transforms.push_back(world_transform);
 
+			mesh_to_address_id[mesh_rid.get_id()] = address_id;
+
 			raytracing_rd.add_address(gpuAdress.vertex_adresses[address_id]);
 			raytracing_rd.add_address(gpuAdress.index_adresses[address_id]);
 			raytracing_rd.add_address(gpuAdress.uv_adresses[address_id]);
+
 			address_id++;
 		} else {
 			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
