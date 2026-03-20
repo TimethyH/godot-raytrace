@@ -538,6 +538,16 @@ public:
 		s->version_lock.unlock();
 	}
 
+	_FORCE_INLINE_ RID mesh_surface_get_attribute_buffer(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->attribute_buffer;
+	}
+
+	_FORCE_INLINE_ uint32_t mesh_surface_get_attribute_buffer_size(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->attribute_buffer_size;
+	}
+
 	_FORCE_INLINE_ void mesh_instance_surface_get_vertex_arrays_and_format(RID p_mesh_instance, uint64_t p_surface_index, uint64_t p_input_mask, bool p_input_motion_vectors, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
 		MeshInstance *mi = mesh_instance_owner.get_or_null(p_mesh_instance);
 		ERR_FAIL_NULL(mi);
@@ -814,6 +824,21 @@ public:
 		}
 
 		return skeleton->uniform_set_3d;
+	}
+
+	_FORCE_INLINE_ RID mesh_surface_get_vertex_buffer(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->vertex_buffer;
+	}
+
+	_FORCE_INLINE_ uint32_t mesh_surface_get_vertex_count(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->vertex_count;
+	}
+
+	_FORCE_INLINE_ uint32_t mesh_surface_get_vertex_buffer_size(void *p_surface) {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return s->vertex_buffer_size;
 	}
 };
 

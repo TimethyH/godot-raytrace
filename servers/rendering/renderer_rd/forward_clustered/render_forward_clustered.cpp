@@ -3944,6 +3944,11 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		return RID();
 	}
 
+	/*RendererRD::MeshStorage::Mesh::Surface *s = reinterpret_cast<RendererRD::MeshStorage::Mesh::Surface *>(surf->surface);
+	if (s == nullptr) {
+		return RID();
+	}*/
+
 	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
 	RID vertex_array;
 	RenderingDevice::VertexFormatID vertex_format;
@@ -3961,20 +3966,178 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		return RID();
 	}
 
-	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
+	uint64_t format = mesh_storage->mesh_surface_get_format(surf->surface);
+	RID blas_vertex_array = vertex_array;
+
+	// Uncompress the mesh
+	if (format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
+		AABB surface_aabb = mesh_storage->mesh_surface_get_aabb(surf->surface);
+		Vector3 aabb_pos = surface_aabb.position;
+		Vector3 aabb_size = surface_aabb.size;
+
+		Vector4 uv_scale = mesh_storage->mesh_surface_get_uv_scale(surf->surface);
+
+		uint32_t vertex_count = mesh_storage->mesh_surface_get_vertices_drawn_count(surf->surface);
+
+		// Read back the vertex buffer data
+
+		Vector<uint8_t> vertex_data = RD::get_singleton()->buffer_get_data(mesh_storage->mesh_surface_get_vertex_buffer(surf->surface));
+		if (vertex_data.is_empty()) {
+			ERR_PRINT("Failed to read vertex buffer for decompression");
+			return RID();
+		}
+
+		uint32_t vert_stride = mesh_storage->mesh_surface_get_vertex_buffer_size(surf->surface) / vertex_count;
+
+		RID attribute_buffer = mesh_storage->mesh_surface_get_attribute_buffer(surf->surface);
+		Vector<uint8_t> attribute_data;
+		uint32_t attr_stride = 0;
+		bool has_uvs = (format & RS::ARRAY_FORMAT_TEX_UV) && attribute_buffer.is_valid();
+
+		if (has_uvs) {
+			attribute_data = RD::get_singleton()->buffer_get_data(attribute_buffer);
+			if (!attribute_data.is_empty()) {
+				attr_stride = mesh_storage->mesh_surface_get_attribute_buffer_size(surf->surface) / vertex_count;
+			} else {
+				has_uvs = false;
+			}
+		}
+
+		// Decompressed layout: position(vec3 float) + normal(vec3 float) + uv(vec2 float) = 32 bytes
+		uint32_t dst_stride = sizeof(float) * 8;
+		Vector<uint8_t> decompressed_data;
+		decompressed_data.resize(vertex_count * dst_stride);
+		memset(decompressed_data.ptrw(), 0, decompressed_data.size());
+
+		const uint8_t *vert_src = vertex_data.ptr();
+		const uint8_t *attr_src = has_uvs ? attribute_data.ptr() : nullptr;
+		uint8_t *dst = decompressed_data.ptrw();
+
+		for (uint32_t v = 0; v < vertex_count; v++) {
+			const uint16_t *vert_comp = reinterpret_cast<const uint16_t *>(vert_src + v * vert_stride);
+			float *out = reinterpret_cast<float *>(dst + v * dst_stride);
+
+			// Decompress position: normalized [0,65535] -> real position via AABB
+			out[0] = (float(vert_comp[0]) / 65535.0f) * aabb_size.x + aabb_pos.x;
+			out[1] = (float(vert_comp[1]) / 65535.0f) * aabb_size.y + aabb_pos.y;
+			out[2] = (float(vert_comp[2]) / 65535.0f) * aabb_size.z + aabb_pos.z;
+
+			// Decompress normal from octahedral encoding in comp[3]
+			// The W component of the position stores encoded normal as two UNORM8 packed into UNORM16
+			uint16_t encoded_normal = vert_comp[3];
+			uint8_t oct_x_byte = encoded_normal & 0xFF;
+			uint8_t oct_y_byte = (encoded_normal >> 8) & 0xFF;
+
+			float oct_x = (float(oct_x_byte) / 255.0f) * 2.0f - 1.0f;
+			float oct_y = (float(oct_y_byte) / 255.0f) * 2.0f - 1.0f;
+
+			// Octahedral decode
+			float nz = 1.0f - Math::abs(oct_x) - Math::abs(oct_y);
+			float nx, ny;
+			if (nz >= 0.0f) {
+				nx = oct_x;
+				ny = oct_y;
+			} else {
+				nx = (1.0f - Math::abs(oct_y)) * (oct_x >= 0.0f ? 1.0f : -1.0f);
+				ny = (1.0f - Math::abs(oct_x)) * (oct_y >= 0.0f ? 1.0f : -1.0f);
+			}
+
+			float len = Math::sqrt(nx * nx + ny * ny + nz * nz);
+			if (len > 0.0f) {
+				out[3] = nx / len;
+				out[4] = ny / len;
+				out[5] = nz / len;
+			} else {
+				out[3] = 0.0f;
+				out[4] = 1.0f;
+				out[5] = 0.0f;
+			}
+
+			// Decompress UVs from attribute buffer
+			// With COMPRESS_ATTRIBUTES, UVs are stored as UNORM16 and scaled by uv_scale
+			if (has_uvs && attr_src) {
+				const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride);
+				out[6] = (float(uv_comp[0]) / 65535.0f) * uv_scale.x + uv_scale.z;
+				out[7] = (float(uv_comp[1]) / 65535.0f) * uv_scale.y + uv_scale.w;
+			} else {
+				out[6] = 0.0f;
+				out[7] = 0.0f;
+			}
+		}
+
+		//Create new vertex buffer with decompressed data
+		BitField<RD::BufferCreationBits> creation_bits;
+		creation_bits.set_flag(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+		creation_bits.set_flag(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+
+		RID decompressed_buffer = RD::get_singleton()->vertex_buffer_create(
+				decompressed_data.size(), decompressed_data, creation_bits);
+
+		// Create vertex format for float3 positions only
+		Vector<RD::VertexAttribute> attribs;
+		RD::VertexAttribute pos_attrib;
+		pos_attrib.location = 0;
+		pos_attrib.offset = 0;
+		pos_attrib.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+		pos_attrib.stride = dst_stride;
+		attribs.push_back(pos_attrib);
+
+		RD::VertexAttribute normal_attrib;
+		normal_attrib.location = 1;
+		normal_attrib.offset = sizeof(float) * 3;
+		normal_attrib.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+		normal_attrib.stride = dst_stride;
+		attribs.push_back(normal_attrib);
+
+		RD::VertexAttribute uv_attrib;
+		uv_attrib.location = 2;
+		uv_attrib.offset = sizeof(float) * 6;
+		uv_attrib.format = RD::DATA_FORMAT_R32G32_SFLOAT;
+		uv_attrib.stride = dst_stride;
+		attribs.push_back(uv_attrib);
+
+		RD::VertexFormatID new_format = RD::get_singleton()->vertex_format_create(attribs);
+
+		Vector<RID> buffers;
+		buffers.push_back(decompressed_buffer);
+		buffers.push_back(decompressed_buffer);
+		buffers.push_back(decompressed_buffer);
+		vertex_array = RD::get_singleton()->vertex_array_create(vertex_count, new_format, buffers);
+		vertex_format = new_format;
+
+		decompressed_blas_buffers.push_back(decompressed_buffer);
+	} else {
+		// Not compressed, use the original vertex data
+		/*	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
+					(1 << RS::ARRAY_NORMAL) |
+					(1 << RS::ARRAY_TEX_UV) |
+					(1 << RS::ARRAY_INDEX);*/
+
+		RD::VertexFormatID unused_format;
+		mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, unused_format);
+	}
+
+	if (vertex_array.is_null()) {
+		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
+		return RID();
+	}
+
+	//RID index_array = mesh_storage->surface_get_index_array(surf->surface);
 	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
 
-	return RD::get_singleton()->blas_create(
-			vertex_array,
-			index_array,
-			geometry_bits);
+	return RD::get_singleton()->blas_create(vertex_array, index_array, geometry_bits);
 }
 
 void RenderForwardClustered::build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type) {
 	RenderingDevice *rd = RenderingDevice::get_singleton();
-
 	LocalVector<RID> &blases = rd->get_type_blases(p_type);
 	RID &tlas = rd->tlas_get_type(p_type);
+
+	// Free old decompressed buffers from previous build
+	for (uint32_t i = 0; i < decompressed_blas_buffers.size(); i++) {
+		rd->free(decompressed_blas_buffers[i]);
+	}
+	decompressed_blas_buffers.clear();
 
 	LocalVector<RID> local_blases;
 	LocalVector<Transform3D> transforms;
@@ -3982,25 +4145,24 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
 	uint32_t material_index = 0;
 	uint32_t address_id = 0;
-	// Iterate ALL instances in the scenario
+
 	for (uint64_t i = 0; i < instance_data.size(); i++) {
 		RendererSceneCull::InstanceData &idata = instance_data[i];
 
-		// Check if it's geometry
 		uint32_t base_type = idata.flags & RendererSceneCull::InstanceData::FLAG_BASE_TYPE_MASK;
 		if (!((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK)) {
-			continue; // Skip non-geometry (lights, probes, etc.)
+			continue;
 		}
 
-		// Skip instances that don't cast shadows
-		// (there is helper geometry placed at the origin of the scene which gets hit by our raytracer
-		// This causes unexpected issues with material indexing)
 		if (!(idata.flags & RendererSceneCull::InstanceData::FLAG_CAST_SHADOWS)) {
 			continue;
 		}
 
-		// Access the geometry instance
 		RenderGeometryInstance *geom = idata.instance_geometry;
+		if (!geom) {
+			continue;
+		}
+
 		GeometryInstanceForwardClustered *inst =
 				static_cast<GeometryInstanceForwardClustered *>(geom);
 
@@ -4011,69 +4173,82 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = geom->get_transform();
 
-		if (mesh_rid.is_valid()) {
-			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-			RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
-			uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
-			for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
-				RID material = inst->data->surface_materials.size() > 0 ? inst->data->surface_materials[0] : RID();
-				if (!material.is_valid()) {
-					material = mesh_storage->mesh_surface_get_material(mesh_rid, 0);
-				}
-				if (inst->data->material_override.is_valid()) {
-					material = inst->data->material_override;
-				}
-				if (material.is_valid()) {
-					raytracing_rd.set_material_data(material, material_storage, material_index);
-				}
+		if (!mesh_rid.is_valid()) {
+			continue;
+		}
+
+		RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+
+		// Material gathering — use correct surface index
+		uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
+		for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
+			RID material;
+
+			// Check per-surface material override first
+			if (surface_index < (uint32_t)inst->data->surface_materials.size() && inst->data->surface_materials[surface_index].is_valid()) {
+				material = inst->data->surface_materials[surface_index];
+			} else {
+				material = mesh_storage->mesh_surface_get_material(mesh_rid, surface_index);
+			}
+
+			// Global material override takes precedence
+			if (inst->data->material_override.is_valid()) {
+				material = inst->data->material_override;
+			}
+
+			if (material.is_valid()) {
+				raytracing_rd.set_material_data(material, material_storage, material_index);
 			}
 		}
 
-		auto &gpuAdress = RD::get_singleton()->gpu_addresses;
+		auto &gpuAddress = RD::get_singleton()->gpu_addresses;
 
-		// Build BLAS for unique meshes
 		if (!rd->has_blas(mesh_rid)) {
+			// First time seeing this mesh — create BLAS
 			RID new_blas = surface_create_blas(inst->surface_caches);
-			local_blases.push_back(new_blas);
+			if (!new_blas.is_valid()) {
+				continue;
+			}
+
 			rd->blas_add_to_map(mesh_rid, new_blas);
-			transforms.push_back(world_transform);
-
 			mesh_to_address_id[mesh_rid.get_id()] = address_id;
-
-			raytracing_rd.add_address(gpuAdress.vertex_adresses[address_id]);
-			raytracing_rd.add_address(gpuAdress.index_adresses[address_id]);
-			raytracing_rd.add_address(gpuAdress.uv_adresses[address_id]);
-
 			address_id++;
-		} else {
-			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
+
 			local_blases.push_back(new_blas);
 			transforms.push_back(world_transform);
 
-			uint32_t existing_id = mesh_to_address_id[mesh_rid.get_id()];
-			raytracing_rd.add_address(gpuAdress.vertex_adresses[existing_id]);
-			raytracing_rd.add_address(gpuAdress.index_adresses[existing_id]);
-			raytracing_rd.add_address(gpuAdress.uv_adresses[existing_id]);
+			uint32_t addr_id = mesh_to_address_id[mesh_rid.get_id()];
+			raytracing_rd.add_address(gpuAddress.vertex_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.index_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.uv_adresses[addr_id]);
+		} else {
+			// Mesh already has a BLAS — reuse it with this instance's transform
+			RID existing_blas = rd->blas_get_or_null(mesh_rid);
+			local_blases.push_back(existing_blas);
+			transforms.push_back(world_transform);
+
+			uint32_t addr_id = mesh_to_address_id[mesh_rid.get_id()];
+			raytracing_rd.add_address(gpuAddress.vertex_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.index_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.uv_adresses[addr_id]);
 		}
 	}
 
 	raytracing_rd.upload_material_data();
 	raytracing_rd.upload_addresses();
 
-	// Maybe error message?
 	if (local_blases.size() <= 0) {
 		return;
 	}
 
-	// This prevents the local blases from overwriting the current acceleration structure if the new structure is invalid
-	blases.clear(); // Maybe free blases?
+	blases.clear();
 	blases = local_blases;
 
 	for (int64_t i = 0; i < blases.size(); ++i) {
 		rd->acceleration_structure_build(blases[i]);
 	}
 
-	// CHECK: Flags might be incorrect.
 	BitField<RenderingDevice::BufferCreationBits> creation_bits;
 	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
 	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);

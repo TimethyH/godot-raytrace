@@ -812,6 +812,7 @@ private:
 
 	rayPushConstant ray_pc;
 
+	LocalVector<RID> decompressed_blas_buffers;
 	RendererRD::RaytraceRD raytracing_rd;
 	std::unordered_map<uint64_t, uint32_t> mesh_to_address_id;
 

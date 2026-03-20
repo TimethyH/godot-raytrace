@@ -6262,6 +6262,7 @@ void RenderingDeviceDriverVulkan::on_device_lost() const {
 
 	VkDeviceFaultCountsEXT fault_counts = {};
 	fault_counts.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT;
+
 	VkResult vkres = device_functions.GetDeviceFaultInfoEXT(vk_device, &fault_counts, nullptr);
 
 	if (vkres != VK_SUCCESS) {
