@@ -3977,7 +3977,7 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 
 		Vector4 uv_scale = mesh_storage->mesh_surface_get_uv_scale(surf->surface);
 
-		uint32_t vertex_count = mesh_storage->mesh_surface_get_vertices_drawn_count(surf->surface);
+		uint32_t vertex_count = mesh_storage->mesh_surface_get_vertex_count(surf->surface);
 
 		// Read back the vertex buffer data
 
@@ -3987,7 +3987,14 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 			return RID();
 		}
 
-		uint32_t vert_stride = mesh_storage->mesh_surface_get_vertex_buffer_size(surf->surface) / vertex_count;
+		uint32_t position_stride = sizeof(uint16_t) * 4; // R16G16B16A16_UNORM = 8 bytes
+		uint32_t normal_stride = sizeof(uint16_t) * 2; // R16G16_UNORM = 4 bytes
+
+		const uint8_t *position_data_start = vertex_data.ptr();
+		const uint8_t *normal_data_start = vertex_data.ptr() + (position_stride * vertex_count);
+
+		//uint32_t vert_stride = mesh_storage->mesh_surface_get_vertex_buffer_size(surf->surface) / vertex_count;
+		//print_line("vert_stride: " + itos(vert_stride) + " vertex_count: " + itos(vertex_count));
 
 		RID attribute_buffer = mesh_storage->mesh_surface_get_attribute_buffer(surf->surface);
 		Vector<uint8_t> attribute_data;
@@ -4009,27 +4016,25 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		decompressed_data.resize(vertex_count * dst_stride);
 		memset(decompressed_data.ptrw(), 0, decompressed_data.size());
 
-		const uint8_t *vert_src = vertex_data.ptr();
 		const uint8_t *attr_src = has_uvs ? attribute_data.ptr() : nullptr;
 		uint8_t *dst = decompressed_data.ptrw();
 
+		//const uint8_t *normal_data_start = vert_src + (8 * vertex_count); // position_stride * vertex_count
+		//uint32_t normal_stride = 4; // sizeof(uint16_t) * 2
+
 		for (uint32_t v = 0; v < vertex_count; v++) {
-			const uint16_t *vert_comp = reinterpret_cast<const uint16_t *>(vert_src + v * vert_stride);
+			const uint16_t *pos_comp = reinterpret_cast<const uint16_t *>(position_data_start + v * position_stride);
 			float *out = reinterpret_cast<float *>(dst + v * dst_stride);
 
-			// Decompress position: normalized [0,65535] -> real position via AABB
-			out[0] = (float(vert_comp[0]) / 65535.0f) * aabb_size.x + aabb_pos.x;
-			out[1] = (float(vert_comp[1]) / 65535.0f) * aabb_size.y + aabb_pos.y;
-			out[2] = (float(vert_comp[2]) / 65535.0f) * aabb_size.z + aabb_pos.z;
+			// Decompress position: UNORM16 [0,65535] -> [0,1] -> real position via AABB
+			out[0] = (float(pos_comp[0]) / 65535.0f) * aabb_size.x + aabb_pos.x;
+			out[1] = (float(pos_comp[1]) / 65535.0f) * aabb_size.y + aabb_pos.y;
+			out[2] = (float(pos_comp[2]) / 65535.0f) * aabb_size.z + aabb_pos.z;
 
-			// Decompress normal from octahedral encoding in comp[3]
-			// The W component of the position stores encoded normal as two UNORM8 packed into UNORM16
-			uint16_t encoded_normal = vert_comp[3];
-			uint8_t oct_x_byte = encoded_normal & 0xFF;
-			uint8_t oct_y_byte = (encoded_normal >> 8) & 0xFF;
-
-			float oct_x = (float(oct_x_byte) / 255.0f) * 2.0f - 1.0f;
-			float oct_y = (float(oct_y_byte) / 255.0f) * 2.0f - 1.0f;
+			// Decompress normal from separate section (R16G16_UNORM octahedral encoding)
+			const uint16_t *norm_comp = reinterpret_cast<const uint16_t *>(normal_data_start + v * normal_stride);
+			float oct_x = (float(norm_comp[0]) / 65535.0f) * 2.0f - 1.0f;
+			float oct_y = (float(norm_comp[1]) / 65535.0f) * 2.0f - 1.0f;
 
 			// Octahedral decode
 			float nz = 1.0f - Math::abs(oct_x) - Math::abs(oct_y);
@@ -4053,8 +4058,7 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 				out[5] = 0.0f;
 			}
 
-			// Decompress UVs from attribute buffer
-			// With COMPRESS_ATTRIBUTES, UVs are stored as UNORM16 and scaled by uv_scale
+			// Decompress UVs from attribute buffer (UNORM16 scaled by uv_scale)
 			if (has_uvs && attr_src) {
 				const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride);
 				out[6] = (float(uv_comp[0]) / 65535.0f) * uv_scale.x + uv_scale.z;

@@ -280,13 +280,23 @@ void main() {
 		normal = tex_color;
   }
 
+  if (mat.metallic_texture_index > 0) { // Check if texture is valid
+        float tex_color = texture(albedo_texture[nonuniformEXT(mat.metallic_texture_index)], uv).b;
+		metallic = tex_color;
+  }
+
+  if (mat.roughness_texture_index > 0) { // Check if texture is valid
+        float tex_color = texture(albedo_texture[nonuniformEXT(mat.roughness_texture_index)], uv).g;
+		roughness = tex_color;
+  }
+
   prd.metallic = metallic;
 
-	vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
+  vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
 
   prd.rayOrigin = vec4(hitPos + normal * 0.001, 1.0f);
   prd.rayDir = vec4(R, 0.0f);
-	prd.hitValue = albedo;
+  prd.hitValue = albedo;
 
 }
 
