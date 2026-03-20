@@ -109,9 +109,9 @@ void main(){
 	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
 	prd.rayDir = vec4(R, 0);
 
-	if(prd.metallic > 0.01){
+	if(prd.metallic > 0.001){
 		// Iterative loop for the reflections
-		while(depth < 2) // TODO remove hardcoded value with vulkan recursion limit
+		while(depth < 4) // TODO remove hardcoded value with vulkan recursion limit
 		{
 			float previous_weight = 1.0f;
 
@@ -237,7 +237,8 @@ void main() {
   vec3 normal = vec3(0);
   float metallic = 0.5f;
   float roughness = 0;
-  
+
+  VertexData vtxData = VertexData(vertex_addr);
   VertexData uvData   = VertexData(uv_addr);
   IndexData  indices  = IndexData(index_addr);
 
@@ -253,6 +254,14 @@ void main() {
 
   vec2 uv = uv0 * bary.x + uv1 * bary.y + uv2 * bary.z;
 
+  vec3 p0 = vec3(loadFloat(vtxData, i0*12+0), loadFloat(vtxData, i0*12+4), loadFloat(vtxData, i0*12+8));
+  vec3 p1 = vec3(loadFloat(vtxData, i1*12+0), loadFloat(vtxData, i1*12+4), loadFloat(vtxData, i1*12+8));
+  vec3 p2 = vec3(loadFloat(vtxData, i2*12+0), loadFloat(vtxData, i2*12+4), loadFloat(vtxData, i2*12+8));
+
+  normal = normalize(cross(p1 - p0, p2 - p0));
+  if (dot(normal, gl_WorldRayDirectionEXT) > 0.0)
+    normal = -normal;
+
   if (mat.albedo_texture_index > 0) { // Check if texture is valid
         vec3 tex_color = texture(albedo_texture[nonuniformEXT(mat.albedo_texture_index)], uv).rgb;
 		albedo = tex_color;
@@ -265,7 +274,7 @@ void main() {
 
 	vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
 
-  prd.rayOrigin = vec4(hitPos * normal * 0.001, 1.0f);
+  prd.rayOrigin = vec4(hitPos + normal * 0.001, 1.0f);
   prd.rayDir = vec4(R, 0.0f);
 	prd.hitValue = albedo;
 
