@@ -169,6 +169,12 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 		mat_data.albedo[2] = albedo.b;
 		mat_data.albedo[3] = albedo.a;
 
+		float metallic = p_material_storage->material_get_param(p_material, "metallic");
+		mat_data.metallicData = metallic;
+
+		float roughness = p_material_storage->material_get_param(p_material, "roughness");
+		mat_data.roughnessData = roughness;
+
 		TextureStorage *texture_storage = TextureStorage::get_singleton();
 		if (default_texture_set == false) {
 			RID default_white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
@@ -281,7 +287,7 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i
 
 	RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
 
-	 if(!ray_scene_state.uniform_set.is_valid()) {
+	if (!ray_scene_state.uniform_set.is_valid()) {
 		print_error(vformat("Uniform set is not valid"));
 	}
 

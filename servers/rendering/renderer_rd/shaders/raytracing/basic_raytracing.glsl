@@ -20,11 +20,15 @@ struct hitPayload
 };
 
 struct MaterialData {
-	vec4 color;
-	uint albedo_texture_index;
-	uint normal_texture_index;
-	uint metallic_texture_index;
-	uint roughness_texture_index;
+  vec4 color;
+  uint albedo_texture_index;
+  uint normal_texture_index;
+  uint metallic_texture_index;
+  uint roughness_texture_index;
+  float metallicData;
+  float roughnessData;
+  float pad1;
+  float pad2;
 };
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
@@ -167,9 +171,13 @@ struct hitPayload {
 struct MaterialData {
   vec4 color;
   uint albedo_texture_index;
-  	uint normal_texture_index;
-	uint metallic_texture_index;
-	uint roughness_texture_index;
+  uint normal_texture_index;
+  uint metallic_texture_index;
+  uint roughness_texture_index;
+  float metallicData;
+  float roughnessData;
+  float pad1;
+  float pad2;
 };
 
 // ===== Constants for current layout =====
@@ -235,8 +243,8 @@ void main() {
   MaterialData mat = material.materials[mat_index];
   vec3 albedo = mat.color.rgb;
   vec3 normal = vec3(0);
-  float metallic = 0.5f;
-  float roughness = 0;
+  float metallic = mat.metallicData;
+  float roughness = mat.roughnessData;
 
   VertexData vtxData = VertexData(vertex_addr);
   VertexData uvData   = VertexData(uv_addr);
@@ -271,6 +279,8 @@ void main() {
         vec3 tex_color = texture(albedo_texture[nonuniformEXT(mat.normal_texture_index)], uv).rgb;
 		normal = tex_color;
   }
+
+  prd.metallic = metallic;
 
 	vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
 
