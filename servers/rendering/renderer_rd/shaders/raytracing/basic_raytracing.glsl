@@ -111,7 +111,7 @@ void main(){
 
 	if(prd.metallic > 0.01){
 		// Iterative loop for the reflections
-		while(depth < 1) // TODO remove hardcoded value with vulkan recursion limit
+		while(depth < 2) // TODO remove hardcoded value with vulkan recursion limit
 		{
 			float previous_weight = 1.0f;
 
@@ -167,9 +167,9 @@ struct hitPayload {
 struct MaterialData {
   vec4 color;
   uint albedo_texture_index;
-  uint dummy;
-  uint dummy2;
-  uint dummy3;
+  	uint normal_texture_index;
+	uint metallic_texture_index;
+	uint roughness_texture_index;
 };
 
 // ===== Constants for current layout =====
@@ -224,7 +224,7 @@ void main() {
   // Barycentrics from hit attributes
   vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
-  //vec3 hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+  vec3 hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // get addresses
   uint mat_index = gl_InstanceCustomIndexEXT;
@@ -235,7 +235,7 @@ void main() {
   MaterialData mat = material.materials[mat_index];
   vec3 albedo = mat.color.rgb;
   vec3 normal = vec3(0);
-  float metallic = 0;
+  float metallic = 0.5f;
   float roughness = 0;
   
   VertexData uvData   = VertexData(uv_addr);
@@ -258,6 +258,15 @@ void main() {
 		albedo = tex_color;
   }
 
+  if (mat.normal_texture_index > 0) { // Check if texture is valid
+        vec3 tex_color = texture(albedo_texture[nonuniformEXT(mat.normal_texture_index)], uv).rgb;
+		normal = tex_color;
+  }
+
+	vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
+
+  prd.rayOrigin = vec4(hitPos * normal * 0.001, 1.0f);
+  prd.rayDir = vec4(R, 0.0f);
 	prd.hitValue = albedo;
 
 }

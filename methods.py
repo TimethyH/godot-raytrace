@@ -707,7 +707,7 @@ def get_compiler_version(env):
 
     if env.msvc and not using_clang(env):
         try:
-            # FIXME: `-latest` works for most cases, but there are edge-cases where this would
+            # FIXME: -latest works for most cases, but there are edge-cases where this would
             # benefit from a more nuanced search.
             # https://github.com/godotengine/godot/pull/91069#issuecomment-2358956731
             # https://github.com/godotengine/godot/pull/91069#issuecomment-2380836341
@@ -726,9 +726,12 @@ def get_compiler_version(env):
                 split = line.split(":", 1)
                 if split[0] == "catalog_productDisplayVersion":
                     sem_ver = split[1].split(".")
-                    ret["major"] = int(sem_ver[0])
-                    ret["minor"] = int(sem_ver[1])
-                    ret["patch"] = int(sem_ver[2].split()[0])
+                    try:
+                        ret["major"] = int(re.sub(r"[^0-9]", "", sem_ver[0]))
+                        ret["minor"] = int(re.sub(r"[^0-9]", "", sem_ver[1]))
+                        ret["patch"] = int(re.sub(r"[^0-9]", "", sem_ver[2].split()[0]))
+                    except (ValueError, IndexError):
+                        pass
                 # Could potentially add section for determining preview version, but
                 # that can wait until metadata is actually used for something.
                 if split[0] == "catalog_buildVersion":
