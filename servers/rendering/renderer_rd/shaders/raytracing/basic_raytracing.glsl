@@ -227,6 +227,32 @@ vec2 getVertexUV(VertexData vtx, uint vertexIndex) {
 
 #CODE : RAYTRACE
 
+// Functions from Godot scene.glsl
+#define M_PI 3.14159265358979323846
+
+float SchlickFresnel(float u) {
+    float m = 1.0 - u;
+    float m2 = m * m;
+    return m2 * m2 * m;
+}
+
+float D_GGX(float NdotH, float alpha) {
+    float a = NdotH * alpha;
+    float k = alpha / (1.0 - NdotH * NdotH + a * a);
+    return k * k * (1.0 / M_PI);
+}
+
+float V_GGX(float NdotL, float NdotV, float alpha) {
+    return 0.5 / mix(2.0 * NdotL * NdotV, NdotL + NdotV, alpha);
+}
+
+float DiffuseBurley(float NdotL, float NdotV, float LdotH, float roughness) {
+    float FD90_minus_1 = 2.0 * LdotH * LdotH * roughness - 0.5;
+    float FdV = 1.0 + FD90_minus_1 * SchlickFresnel(NdotV);
+    float FdL = 1.0 + FD90_minus_1 * SchlickFresnel(NdotL);
+    return (1.0 / M_PI) * FdV * FdL * NdotL;
+}
+
 void main() {
 
   // Barycentrics from hit attributes
@@ -292,11 +318,41 @@ void main() {
 
   prd.metallic = metallic;
 
+  // Pbr equation
+  vec3 N = normal;
+  vec3 V = normalize(-gl_WorldRayDirectionEXT);
   vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
+  vec3 L = normalize(vec3(0.2,1.0,0.2) - hitPos);
+  vec3 H = normalize(V + L);
+  
+  vec3 F0 = vec3(0.04f, 0.04f, 0.04f);
+  F0 = mix(F0, albedo.rgb, metallic);
+
+  float ndotl = max(dot(N, L), 0.0f);
+  float ndotv = max(dot(N, V), 0.0f);
+  float hdotv = max(dot(H, V), 0.0f);
+  float ndoth = max(dot(N, H), 0.0f);
+  float ldoth = max(dot(L, H), 0.0f);
+
+  float NDF = D_GGX(ndoth, roughness);
+  float G = V_GGX(ndotl, ndotv, roughness);
+  vec3 F = F0 + (1.0 - F0) * SchlickFresnel(hdotv);
+
+  vec3 numerator = NDF * G * F;
+  float denominator = max(4.0f * ndotv * ndotl, 0.0001f);
+  vec3 specular = max(numerator / denominator, vec3(0.0f, 0.0f, 0.0f));
+
+  vec3 kS = F;
+  vec3 kD = 1.0f - kS;
+  kD *= (1.0f - metallic);
+
+  float diffuse = DiffuseBurley(ndotl, ndotv, ldoth, roughness);
+
+  vec3 Lo = kD * vec3(diffuse) + specular * ndotl;
 
   prd.rayOrigin = vec4(hitPos + normal * 0.001, 1.0f);
   prd.rayDir = vec4(R, 0.0f);
-  prd.hitValue = albedo;
+  prd.hitValue = Lo;
 
 }
 
