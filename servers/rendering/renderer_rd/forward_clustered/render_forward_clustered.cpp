@@ -2287,7 +2287,24 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		//p_render_data->scene_data->flip_y = false;
 		//Projection inv_proj_view = p_render_data->scene_data->get_cam_projection() * p_render_data->scene_data->get_view_projection(0);
 
-		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform);
+		//RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+		Transform3D inverse_transform = p_render_data->scene_data->cam_transform.affine_inverse();
+
+		Vector3 directional_light_direction;
+		for (int i = 0; i < (int)p_render_data->lights->size(); i++) {
+			RID light_instance_rid = (*p_render_data->lights)[i];
+			RID base = light_storage->light_instance_get_base_light(light_instance_rid);
+
+			if (light_storage->light_get_type(base) == RS::LIGHT_DIRECTIONAL) {
+				Transform3D light_transform = light_storage->light_instance_get_base_transform(light_instance_rid);
+				directional_light_direction = inverse_transform.basis.xform(
+																			 light_transform.basis.xform(Vector3(0, 0, 1)))
+													  .normalized();
+				break;
+			}
+		}
+
+		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform, directional_light_direction);
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 

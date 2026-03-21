@@ -23,7 +23,7 @@ class RaytraceRD {
 public:
 	//RaytraceRD();
 	void init(const Projection &p_inv_view_proj, const Transform3D &p_cam_pos, RID p_render_buffer, RID p_render_buffer_normal, RID p_render_buffer_specular, RID p_tlas);
-	void update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos);
+	void update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos, const Vector3 &light_dir);
 	void setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas);
 
 	void set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index);
@@ -43,7 +43,8 @@ public:
 			float align;
 			float inv_view_proj[16]; // 64
 			float inv_view[16]; // 64
-
+			float light_direction[3];
+			float align2;
 			//float z_near; // 4 - 292
 			//float z_far; // 4 - 296
 		};

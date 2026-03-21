@@ -45,8 +45,11 @@ layout(push_constant) uniform PushConstants {
 
 struct UBO{
 	vec3 cameraPos;
+	float pad;
 	mat4 inverseViewProj;
 	mat4 inverseView;
+	vec3 lightDirection;
+	float pad1;
 };
 
 layout(set = 0, binding = 2) uniform ubo_t{
@@ -186,6 +189,19 @@ const uint UV_OFFSET = 0u;   // start at 0 (no interleave)
 
 layout(location = 0) rayPayloadInEXT hitPayload prd;
 
+struct UBO{
+	vec3 cameraPos;
+	float pad;
+	mat4 inverseViewProj;
+	mat4 inverseView;
+	vec3 lightDirection;
+	float pad1;
+};
+
+layout(set = 0, binding = 2) uniform ubo_t{
+	UBO data;
+}ubo;
+
 // Treat vertex buffer as raw 32-bit words (4 bytes each)
 layout(buffer_reference, scalar) readonly buffer VertexData {
   uint data[];
@@ -322,7 +338,7 @@ void main() {
   vec3 N = normal;
   vec3 V = normalize(-gl_WorldRayDirectionEXT);
   vec3 R = reflect(gl_WorldRayDirectionEXT, normal);
-  vec3 L = normalize(vec3(0.2,1.0,0.2) - hitPos);
+  vec3 L = normalize(ubo.data.lightDirection - hitPos);
   vec3 H = normalize(V + L);
   
   vec3 F0 = vec3(0.04f, 0.04f, 0.04f);
