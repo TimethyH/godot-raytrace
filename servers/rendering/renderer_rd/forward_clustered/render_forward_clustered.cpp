@@ -2327,7 +2327,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			Size2i size = rb->get_internal_size();
 
 			RD::TextureFormat tformat;
-			tformat.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+			tformat.format = RD::DATA_FORMAT_R32G32B32A32_SFLOAT;
 			tformat.width = size.x;
 			tformat.height = size.y;
 			tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT |
@@ -2336,8 +2336,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			raytracing_rd.set_accumulation(RD::get_singleton()->texture_create(tformat, RD::TextureView()));
 		}
-
-		
 
 		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform, directional_light_direction);
 

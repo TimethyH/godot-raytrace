@@ -17,6 +17,7 @@ struct hitPayload
   float attenuation;
   float metallic;
   int  done;
+  uint rng_state;
   vec4 rayOrigin;
   vec4 rayDir;
 };
@@ -68,7 +69,7 @@ layout(set = 0, binding = 8) uniform texture2D specular;
 
 layout(set = 0, binding = 9) uniform sampler point_sampler;
 
-layout(set = 0, binding = 10, rgba8) uniform image2D accumulation_texture;
+layout(set = 0, binding = 10, rgba32f) uniform image2D accumulation_texture;
 
 #CODE : RAYTRACE
 
@@ -134,11 +135,17 @@ void main(){
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
 	rng_init(pixCoords, push.frame_count); // Use frame 0 for index
 
+	vec3 rasterized_base = imageLoad(image, pixCoords).xyz;
+
 	// Initialize prd values
-	if(push.frame_count == 1)
-		prd.hitValue = imageLoad(image, pixCoords).xyz;
-	else
-		prd.hitValue = imageLoad(accumulation_texture, pixCoords).xyz;
+	vec3 previous_sum;
+	if(push.frame_count == 1){
+		previous_sum = vec3(0.0);
+	} else {
+		previous_sum = imageLoad(accumulation_texture, pixCoords).xyz;
+	}
+		
+
 	prd.attenuation = 1.0f;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
@@ -172,18 +179,20 @@ void main(){
 	vec3 V = normalize(ubo.data.cameraPos - world_pos);
 	vec3 R = reflect(-V, decoded_normals);
 
-	vec3 accumulated_color = prd.hitValue;
-	prd.attenuation = 1.0f * prd.metallic;
+	vec3 accumulated_color = vec3(0.0);
+
 
 	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
 	prd.rayDir = vec4(R, 0);
 
-for(int s = 0; s < 32; s++) {
+	int samples = 32;
+for(int s = 0; s < samples; s++) {
 	vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
 	prd.rayDir = vec4(random_direction, 0);
 	int depth = 0;
 	prd.metallic = metallicValue;
-		if(prd.metallic > 0.001){
+	prd.attenuation = 1.0f * prd.metallic;
+		//if(prd.metallic > 0.001){
 			// Iterative loop for the reflections
 			while(depth < 4) // TODO remove hardcoded value with vulkan recursion limit
 			{
@@ -206,16 +215,17 @@ for(int s = 0; s < 32; s++) {
 				prd.attenuation *= prd.metallic; // reduce attenuation depending on the metallic value of the material
 				depth++;
 			}
-		}
+		//}
 
 	}
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color / vec3(push.frame_count), 1.0f));
-		
-		
-	imageStore(accumulation_texture, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
-	
-	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
+	accumulated_color /= samples;
+
+	vec3 total_bounces = accumulated_color + previous_sum;
+	imageStore(accumulation_texture, pixCoords, vec4(total_bounces, 1.0));
+
+	vec3 avg_bounces = total_bounces / float(push.frame_count);
+	imageStore(image, pixCoords, vec4(rasterized_base + avg_bounces, 1.0));
 }
 
 #[closest_hit]
@@ -233,12 +243,14 @@ for(int s = 0; s < 32; s++) {
 
 #GLOBALS
 
-struct hitPayload {
+struct hitPayload
+{
   vec3 hitValue;
   int  depth;
   float attenuation;
   float metallic;
   int  done;
+  uint rng_state;
   vec4 rayOrigin;
   vec4 rayDir;
 };
@@ -459,6 +471,7 @@ struct hitPayload
   float attenuation;
   float metallic;
   int  done;
+  uint rng_state;
   vec4 rayOrigin;
   vec4 rayDir;
 };
