@@ -135,7 +135,7 @@ void main(){
 	rng_init(pixCoords, push.frame_count); // Use frame 0 for index
 
 	// Initialize prd values
-	if(push.frame_count == 0)
+	if(push.frame_count == 1)
 		prd.hitValue = imageLoad(image, pixCoords).xyz;
 	else
 		prd.hitValue = imageLoad(accumulation_texture, pixCoords).xyz;
@@ -178,7 +178,7 @@ void main(){
 	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
 	prd.rayDir = vec4(R, 0);
 
-for(int s = 0; s < 4; s++) {
+for(int s = 0; s < 32; s++) {
 	vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
 	prd.rayDir = vec4(random_direction, 0);
 	int depth = 0;
@@ -209,7 +209,10 @@ for(int s = 0; s < 4; s++) {
 		}
 
 	}
+
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color / vec3(push.frame_count), 1.0f));
+		
+		
 	imageStore(accumulation_texture, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);

@@ -2304,6 +2304,21 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
+		Input *input = Input::get_singleton();
+
+		// Check if any form of movement has occured in the last frame so we reset the accumulation
+		bool has_movement_occured = false;
+
+		if (input->is_mouse_button_pressed(MouseButton::RIGHT)) {
+			has_movement_occured = input->is_key_pressed(Key::W) ||
+					input->is_key_pressed(Key::A) ||
+					input->is_key_pressed(Key::S) ||
+					input->is_key_pressed(Key::D) ||
+					input->get_last_mouse_velocity().length_squared() > 0.0f;
+		}
+
+		raytracing_rd.should_reset_accumulation(has_movement_occured);
+
 		// Ensure that the accumulation texture is the correct size
 		raytracing_rd.ensure_accumulation_texture(rb);
 

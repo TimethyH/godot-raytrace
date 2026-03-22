@@ -292,12 +292,12 @@ RaytraceRD::~RaytraceRD() {
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
 void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
-	current_frame++;
-
 	if (reset_accumulation) {
 		current_frame = 0u;
 		reset_accumulation = false;
 	}
+
+	current_frame++;
 
 	RayPushConstant ray_push_constant;
 	ray_push_constant.clear_color[0] = { 1.0f };
