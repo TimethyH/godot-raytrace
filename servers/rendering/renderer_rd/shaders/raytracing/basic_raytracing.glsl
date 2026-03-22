@@ -43,6 +43,10 @@ layout(set = 0, binding = 1) uniform accelerationStructureEXT tlas;
 
 layout(push_constant) uniform PushConstants {
     vec4 clear_color;
+	uint frame_count;
+	uint pad0;
+	uint pad1;
+	uint pad2;
 } push;
 
 struct UBO{
@@ -126,7 +130,7 @@ vec3 cosine_sampled_hemisphere(vec3 dir, float roughness){
 
 void main(){
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
-	rng_init(pixCoords, 0u); // Use frame 0 for index
+	rng_init(pixCoords, push.frame_count); // Use frame 0 for index
 
 	// Initialize prd values
 	prd.hitValue = imageLoad(image, pixCoords).xyz;
@@ -148,7 +152,8 @@ void main(){
 	decoded_normals = encoded_normal.xyz * 2.0f - 1.0f;
 	decoded_normals = normalize(mat3(ubo.data.inverseView) * decoded_normals);
 
-	prd.metallic = texelFetch(specular, pixCoords, 0).w;
+	float metallicValue = texelFetch(specular, pixCoords, 0).w;
+	prd.metallic = metallicValue;
 
 	float depth_color = texelFetch(depth, pixCoords, 0).r;
 
@@ -172,6 +177,7 @@ for(int s = 0; s < 4; s++) {
 	vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
 	prd.rayDir = vec4(random_direction, 0);
 	int depth = 0;
+	prd.metallic = metallicValue;
 		if(prd.metallic > 0.001){
 			// Iterative loop for the reflections
 			while(depth < 4) // TODO remove hardcoded value with vulkan recursion limit

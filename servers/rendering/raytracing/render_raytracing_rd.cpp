@@ -281,7 +281,7 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i
 	ray_push_constant.clear_color[1] = { 0.0f };
 	ray_push_constant.clear_color[2] = { 1.0f };
 	ray_push_constant.clear_color[3] = { 1.0f };
-	//ray_push_constant.frame_count = 0;
+	ray_push_constant.frame_count = current_frame;
 
 	Vector<uint8_t> push_constant_bytes;
 	push_constant_bytes.resize(sizeof(RayPushConstant));
