@@ -61,6 +61,8 @@ private:
 	// 128 is the max size of a push constant.
 	struct RayPushConstant {
 		float clear_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 16
+		/*uint32_t frame_count{};
+		uint32_t pad[3];*/
 	};
 
 	// Ideally this struct holds material data which gets sent to the GPU..
@@ -98,6 +100,8 @@ private:
 	uint32_t texture_id = 1;
 	RID material_buffer;
 	RID address_buffer;
+
+	uint32_t current_frame;
 
 	bool default_texture_set = false;
 };

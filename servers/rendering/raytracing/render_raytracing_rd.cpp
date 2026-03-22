@@ -274,11 +274,14 @@ RaytraceRD::~RaytraceRD() {
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
 void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
+	current_frame++;
+
 	RayPushConstant ray_push_constant;
 	ray_push_constant.clear_color[0] = { 1.0f };
 	ray_push_constant.clear_color[1] = { 0.0f };
 	ray_push_constant.clear_color[2] = { 1.0f };
 	ray_push_constant.clear_color[3] = { 1.0f };
+	//ray_push_constant.frame_count = 0;
 
 	Vector<uint8_t> push_constant_bytes;
 	push_constant_bytes.resize(sizeof(RayPushConstant));

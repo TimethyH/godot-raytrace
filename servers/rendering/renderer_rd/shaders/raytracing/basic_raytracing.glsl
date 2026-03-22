@@ -8,6 +8,8 @@
 
 #GLOBALS
 
+#define M_PI 3.14159265358979323846
+
 struct hitPayload
 {
   vec3 hitValue;
@@ -71,8 +73,60 @@ vec3 reconstruct_position_from_depth(vec2 screen_uv, float raw_depth) {
     return world_pos.xyz;
 }
 
+uint rng_state;
+
+uint wang_hash(uint seed) {
+    seed = (seed ^ 61u) ^ (seed >> 16u);
+    seed *= 9u;
+    seed = seed ^ (seed >> 4u);
+    seed *= 0x27d4eb2du;
+    seed = seed ^ (seed >> 15u);
+    return seed;
+}
+
+void rng_init(ivec2 coord, uint frame) {
+    rng_state = wang_hash(uint(coord.x) ^ wang_hash(uint(coord.y) ^ wang_hash(frame)));
+}
+
+float rand_float() {
+    rng_state ^= rng_state << 13u;
+    rng_state ^= rng_state >> 17u;
+    rng_state ^= rng_state << 5u;
+    return float(rng_state) * (1.0 / 4294967296.0);
+}
+
+vec3 cosine_sampled_hemisphere(vec3 dir, float roughness){
+	if (roughness < 0.001)
+		return dir;
+
+	// Sampling random numbers between -1, 1 for the sampling
+	float r1 = rand_float();
+    float r2 = rand_float();
+
+	// TBN direction
+	vec3 up = abs(dir.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
+    vec3 tangent   = normalize(cross(up, dir));
+    vec3 bitangent = cross(dir, tangent);
+
+	// Roughness base cone sampling
+	float alpha = roughness * roughness;
+    float cos_theta = sqrt((1.0 - r1) / (1.0 + (alpha * alpha - 1.0) * r1));
+    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    float phi = 2.0 * M_PI * r2;
+
+     vec3 local_dir = vec3(
+        sin_theta * cos(phi),
+        sin_theta * sin(phi),
+        cos_theta
+    );
+
+	// local direction to world space direction
+	return normalize(tangent * local_dir.x + bitangent * local_dir.y + dir * local_dir.z);
+}
+
 void main(){
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
+	rng_init(pixCoords, 0u); // Use frame 0 for index
 
 	// Initialize prd values
 	prd.hitValue = imageLoad(image, pixCoords).xyz;
@@ -103,8 +157,6 @@ void main(){
 	float t_min = 0.001;
 	float t_max = 10000.0;
 
-	int depth = 0;
-
 	//vec3 view = normalize(ubo.data.cameraPos - world_pos);
 
 	vec3 V = normalize(ubo.data.cameraPos - world_pos);
@@ -116,31 +168,36 @@ void main(){
 	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
 	prd.rayDir = vec4(R, 0);
 
-	if(prd.metallic > 0.001){
-		// Iterative loop for the reflections
-		while(depth < 4) // TODO remove hardcoded value with vulkan recursion limit
-		{
-			float previous_weight = 1.0f;
+for(int s = 0; s < 4; s++) {
+	vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
+	prd.rayDir = vec4(random_direction, 0);
+	int depth = 0;
+		if(prd.metallic > 0.001){
+			// Iterative loop for the reflections
+			while(depth < 4) // TODO remove hardcoded value with vulkan recursion limit
+			{
+				//float previous_weight = 1.0f;
 
-			traceRayEXT(tlas,
-			gl_RayFlagsOpaqueEXT,
-			0xFF,
-			0,
-			0,
-			0,
-			prd.rayOrigin.xyz,
-			t_min,
-			prd.rayDir.xyz,
-			t_max,
-			0
-			);
+				traceRayEXT(tlas,
+				gl_RayFlagsOpaqueEXT,
+				0xFF,
+				0,
+				0,
+				0,
+				prd.rayOrigin.xyz,
+				t_min,
+				prd.rayDir.xyz,
+				t_max,
+				0
+				);
 
-			accumulated_color += prd.hitValue * prd.attenuation;
-			prd.attenuation *= prd.metallic; // reduce attenuation depending on the metallic value of the material
-			depth++;
+				accumulated_color += prd.hitValue * prd.attenuation;
+				prd.attenuation *= prd.metallic; // reduce attenuation depending on the metallic value of the material
+				depth++;
+			}
 		}
-	}
 
+	}
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
