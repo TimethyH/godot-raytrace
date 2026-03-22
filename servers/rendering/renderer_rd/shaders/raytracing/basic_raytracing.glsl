@@ -134,6 +134,7 @@ vec3 cosine_sampled_hemisphere(vec3 dir, float roughness){
 void main(){
 	ivec2 pixCoords = ivec2(gl_LaunchIDEXT.xy);
 	rng_init(pixCoords, push.frame_count); // Use frame 0 for index
+	prd.rng_state = rng_state;
 
 	vec3 rasterized_base = imageLoad(image, pixCoords).xyz;
 
@@ -185,16 +186,18 @@ void main(){
 	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
 	prd.rayDir = vec4(R, 0);
 
-	int samples = 32;
+	int samples = 4;
 for(int s = 0; s < samples; s++) {
 	vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
+	prd.rng_state = rng_state;
+
 	prd.rayDir = vec4(random_direction, 0);
 	int depth = 0;
 	prd.metallic = metallicValue;
 	prd.attenuation = 1.0f * prd.metallic;
 		//if(prd.metallic > 0.001){
 			// Iterative loop for the reflections
-			while(depth < 4) // TODO remove hardcoded value with vulkan recursion limit
+			while(depth < 1) // TODO remove hardcoded value with vulkan recursion limit
 			{
 				//float previous_weight = 1.0f;
 
@@ -242,6 +245,46 @@ for(int s = 0; s < samples; s++) {
 #VERSION_DEFINES
 
 #GLOBALS
+
+#define M_PI 3.14159265358979323846
+
+uint rng_state;
+
+float rand_float() {
+    rng_state ^= rng_state << 13u;
+    rng_state ^= rng_state >> 17u;
+    rng_state ^= rng_state << 5u;
+    return float(rng_state) * (1.0 / 4294967296.0);
+}
+
+vec3 cosine_sampled_hemisphere(vec3 dir, float roughness){
+	if (roughness < 0.001)
+		return dir;
+
+	// Sampling random numbers between -1, 1 for the sampling
+	float r1 = rand_float();
+    float r2 = rand_float();
+
+	// TBN direction
+	vec3 up = abs(dir.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
+    vec3 tangent   = normalize(cross(up, dir));
+    vec3 bitangent = cross(dir, tangent);
+
+	// Roughness base cone sampling
+	float alpha = roughness * roughness;
+    float cos_theta = sqrt((1.0 - r1) / (1.0 + (alpha * alpha - 1.0) * r1));
+    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+    float phi = 2.0 * M_PI * r2;
+
+     vec3 local_dir = vec3(
+        sin_theta * cos(phi),
+        sin_theta * sin(phi),
+        cos_theta
+    );
+
+	// local direction to world space direction
+	return normalize(tangent * local_dir.x + bitangent * local_dir.y + dir * local_dir.z);
+}
 
 struct hitPayload
 {
@@ -328,8 +371,6 @@ vec2 getVertexUV(VertexData vtx, uint vertexIndex) {
 #CODE : RAYTRACE
 
 // Functions from Godot scene.glsl
-#define M_PI 3.14159265358979323846
-
 float SchlickFresnel(float u) {
     float m = 1.0 - u;
     float m2 = m * m;
@@ -354,6 +395,8 @@ float DiffuseBurley(float NdotL, float NdotV, float LdotH, float roughness) {
 }
 
 void main() {
+
+  rng_state = prd.rng_state;
 
   // Barycentrics from hit attributes
   vec3 bary = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
@@ -451,9 +494,12 @@ void main() {
   vec3 Lo = kD * vec3(diffuse) + specular * ndotl;
 
   prd.rayOrigin = vec4(hitPos + normal * 0.001, 1.0f);
-  prd.rayDir = vec4(R, 0.0f);
+  vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
+  prd.rng_state = rng_state;
+  prd.rayDir = vec4(random_direction, 0);
+  //prd.rayDir = vec4(R, 0.0f);
   prd.hitValue = Lo;
-
+  //prd.rng_state = rng_state;
 }
 
 #[miss]
@@ -482,4 +528,5 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 
 void main() {
 	prd.hitValue = vec3(0.0, 0.0, 0.0);
+	prd.done = 1;
 }
