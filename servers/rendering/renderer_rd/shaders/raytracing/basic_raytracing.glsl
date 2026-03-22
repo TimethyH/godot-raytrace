@@ -68,6 +68,8 @@ layout(set = 0, binding = 8) uniform texture2D specular;
 
 layout(set = 0, binding = 9) uniform sampler point_sampler;
 
+layout(set = 0, binding = 10, rgba8) uniform image2D accumulation_texture;
+
 #CODE : RAYTRACE
 
 vec3 reconstruct_position_from_depth(vec2 screen_uv, float raw_depth) {
@@ -133,7 +135,10 @@ void main(){
 	rng_init(pixCoords, push.frame_count); // Use frame 0 for index
 
 	// Initialize prd values
-	prd.hitValue = imageLoad(image, pixCoords).xyz;
+	if(push.frame_count == 0)
+		prd.hitValue = imageLoad(image, pixCoords).xyz;
+	else
+		prd.hitValue = imageLoad(accumulation_texture, pixCoords).xyz;
 	prd.attenuation = 1.0f;
 
 	const vec2 pixel_center = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
@@ -204,7 +209,8 @@ for(int s = 0; s < 4; s++) {
 		}
 
 	}
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color / vec3(push.frame_count), 1.0f));
+	imageStore(accumulation_texture, ivec2(gl_LaunchIDEXT.xy), vec4(accumulated_color, 1.0f));
 	
 	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), material.color);
 }

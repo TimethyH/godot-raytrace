@@ -26,11 +26,15 @@ public:
 	void update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos, const Vector3 &light_dir);
 	void setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas);
 
+	void ensure_accumulation_texture(Ref<RenderSceneBuffersRD> rb);
 	void set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index);
 	void upload_material_data();
 	void upload_addresses();
 
 	void add_address(const uint64_t &address);
+
+	RID get_accumulation() { return accumulation_texture; }
+	void set_accumulation(RID tex) { accumulation_texture = tex; }
 
 	~RaytraceRD();
 
@@ -100,6 +104,11 @@ private:
 	uint32_t texture_id = 1;
 	RID material_buffer;
 	RID address_buffer;
+
+	// Stores accumulated pixel data
+	RID accumulation_texture;
+	Size2i accumulation_texture_size{};
+	bool reset_accumulation = false;
 
 	uint32_t current_frame;
 

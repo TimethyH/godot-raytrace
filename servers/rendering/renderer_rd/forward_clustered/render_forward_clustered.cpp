@@ -2304,6 +2304,26 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
+		// Ensure that the accumulation texture is the correct size
+		raytracing_rd.ensure_accumulation_texture(rb);
+
+		// Make sure the accumulation texture exists
+		if (raytracing_rd.get_accumulation().is_null() || !raytracing_rd.get_accumulation().is_valid()) {
+			Size2i size = rb->get_internal_size();
+
+			RD::TextureFormat tformat;
+			tformat.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+			tformat.width = size.x;
+			tformat.height = size.y;
+			tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT |
+					RD::TEXTURE_USAGE_STORAGE_BIT;
+			tformat.texture_type = RD::TEXTURE_TYPE_2D;
+
+			raytracing_rd.set_accumulation(RD::get_singleton()->texture_create(tformat, RD::TextureView()));
+		}
+
+		
+
 		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform, directional_light_direction);
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");

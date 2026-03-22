@@ -158,7 +158,25 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		uniforms.push_back(u);
 	}
 
+	{
+		RD::Uniform u;
+		u.binding = 10;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.append_id(accumulation_texture);
+		uniforms.push_back(u);
+	}
+
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
+}
+
+void RaytraceRD::ensure_accumulation_texture(Ref<RenderSceneBuffersRD> rb) {
+	Size2i size = rb->get_internal_size();
+	if (accumulation_texture_size != size || reset_accumulation == true) {
+		RD::get_singleton()->free(accumulation_texture);
+		accumulation_texture = RID();
+		accumulation_texture_size = size;
+		reset_accumulation = true;
+	}
 }
 
 void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index) {
@@ -275,6 +293,11 @@ RaytraceRD::~RaytraceRD() {
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
 void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
 	current_frame++;
+
+	if (reset_accumulation) {
+		current_frame = 0u;
+		reset_accumulation = false;
+	}
 
 	RayPushConstant ray_push_constant;
 	ray_push_constant.clear_color[0] = { 1.0f };
