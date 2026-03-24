@@ -21,14 +21,14 @@ void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_ca
 	raytracing_shader.default_shader_rd = raytracing_shader.shader.version_get_shader(raytracing_shader.version, 0);
 
 	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
-	update_buffer(p_inv_view_proj, p_inv_view_proj, p_cam_pos, Vector3(0.0f,0.0f,0.0f));
+	update_buffer(p_inv_view_proj, p_inv_view_proj, p_cam_pos, Vector3(0.0f, 0.0f, 0.0f));
 
 	setup_uniform_data(p_render_buffer, p_render_buffer, p_render_buffer, p_render_buffer, p_tlas);
 
 	raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(raytracing_shader.default_shader_rd);
 }
 
-void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos, const Vector3& light_dir) {
+void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos, const Vector3 &light_dir) {
 	//ubo set cam
 	ray_scene_state.ubo.camera_pos[0] = cam_pos.get_origin().x;
 	ray_scene_state.ubo.camera_pos[1] = cam_pos.get_origin().y;
@@ -179,7 +179,7 @@ void RaytraceRD::ensure_accumulation_texture(Ref<RenderSceneBuffersRD> rb) {
 	}
 }
 
-void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index) {
+void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index, const bool is_compressed) {
 	if (!material_to_index.has(p_material)) {
 		MaterialData mat_data;
 
@@ -194,6 +194,7 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 
 		float roughness = p_material_storage->material_get_param(p_material, "roughness");
 		mat_data.roughnessData = roughness;
+		mat_data.is_compressed = is_compressed;
 
 		TextureStorage *texture_storage = TextureStorage::get_singleton();
 		if (default_texture_set == false) {

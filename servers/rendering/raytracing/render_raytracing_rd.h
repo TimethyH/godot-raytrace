@@ -28,7 +28,7 @@ public:
 
 	void should_reset_accumulation(bool reset) { reset_accumulation = reset; }
 	void ensure_accumulation_texture(Ref<RenderSceneBuffersRD> rb);
-	void set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index);
+	void set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index, const bool is_compressed);
 	void upload_material_data();
 	void upload_addresses();
 
@@ -79,7 +79,8 @@ private:
 		uint32_t roughness_texture_index = 0; // 4x4 = 16
 		float metallicData = 0.0f;
 		float roughnessData = 0.0f;
-		float pad[2];
+		uint32_t is_compressed = 0;
+		float pad;
 	};
 
 	struct RaytracingShader {

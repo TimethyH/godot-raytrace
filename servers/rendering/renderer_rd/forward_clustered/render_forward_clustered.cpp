@@ -1679,7 +1679,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 #ifdef RAYTRACING_TEST
 	static int first_run = 0;
-	if (first_run == 20) {
+	if (first_run == 50) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
 		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -1699,7 +1699,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), normal_texture, RID(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
 	}
 
-	if (first_run <= 20) {
+	if (first_run <= 50) {
 		first_run++;
 	}
 //build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
@@ -4110,11 +4110,19 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 
 			// Decompress UVs from attribute buffer (UNORM16 scaled by uv_scale)
 			if (has_uvs && attr_src) {
-				const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride);
+				//const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride);
+
+				uint32_t uv_offset = 0;
+				if (format & RS::ARRAY_FORMAT_COLOR) {
+					uv_offset += sizeof(uint32_t); // R8G8B8A8_UNORM = 4 bytes
+				}
+
+				const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride + uv_offset);
+
 				out[6] = (float(uv_comp[0]) / 65535.0f) * uv_scale.x + uv_scale.z;
 				out[7] = (float(uv_comp[1]) / 65535.0f) * uv_scale.y + uv_scale.w;
 			} else {
-				out[6] = 0.0f;
+				out[6] = 1.0f;
 				out[7] = 0.0f;
 			}
 		}
@@ -4251,8 +4259,12 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 				material = inst->data->material_override;
 			}
 
+			void *surface = mesh_storage->mesh_get_surface(mesh_rid, surface_index);
+			uint64_t surface_format = mesh_storage->mesh_surface_get_format(surface);
+			bool is_compressed = (surface_format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0;
+
 			if (material.is_valid()) {
-				raytracing_rd.set_material_data(material, material_storage, material_index);
+				raytracing_rd.set_material_data(material, material_storage, material_index, is_compressed);
 			}
 		}
 
@@ -4309,6 +4321,7 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	RID tlas_instances_buffer = rd->tlas_instances_buffer_create(blases.size(), creation_bits);
 	rd->tlas_instances_buffer_fill(tlas_instances_buffer, blases, transforms);
 
+	rd->barrier(RD::BARRIER_MASK_ALL_BARRIERS, RD::BARRIER_MASK_ALL_BARRIERS);
 	tlas = rd->tlas_create(tlas_instances_buffer);
 	rd->acceleration_structure_build(tlas);
 }

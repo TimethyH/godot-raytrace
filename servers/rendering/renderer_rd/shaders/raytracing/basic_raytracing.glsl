@@ -30,7 +30,7 @@ struct MaterialData {
   uint roughness_texture_index;
   float metallicData;
   float roughnessData;
-  float pad1;
+  uint is_compressed;
   float pad2;
 };
 
@@ -183,7 +183,7 @@ void main(){
 	vec3 accumulated_color = vec3(0.0);
 
 
-	prd.rayOrigin = vec4(world_pos + decoded_normals * 1e-4, 1.0);
+	prd.rayOrigin = vec4(world_pos + decoded_normals * 0.001, 1.0);
 	prd.rayDir = vec4(R, 0);
 
 	int samples = 4;
@@ -197,7 +197,7 @@ for(int s = 0; s < samples; s++) {
 	prd.attenuation = 1.0f * prd.metallic;
 		//if(prd.metallic > 0.001){
 			// Iterative loop for the reflections
-			while(depth < 1) // TODO remove hardcoded value with vulkan recursion limit
+			while(depth < 2) // TODO remove hardcoded value with vulkan recursion limit
 			{
 				//float previous_weight = 1.0f;
 
@@ -306,13 +306,14 @@ struct MaterialData {
   uint roughness_texture_index;
   float metallicData;
   float roughnessData;
-  float pad1;
+  uint is_compressed;
   float pad2;
 };
 
 // ===== Constants for current layout =====
 const uint UV_STRIDE = 8u;   // bytes per vertex in the UV buffer
 const uint UV_OFFSET = 0u;   // start at 0 (no interleave)
+const uint DECOMPRESSED_STRIDE = 32u;
 
 layout(location = 0) rayPayloadInEXT hitPayload prd;
 
@@ -363,9 +364,45 @@ vec2 loadVec2(VertexData buf, uint64_t baseAddr) {
   );
 }
 
-vec2 getVertexUV(VertexData vtx, uint vertexIndex) {
-  uint64_t base = uint64_t(vertexIndex) * UV_STRIDE + UV_OFFSET;
-  return loadVec2(vtx, base);
+vec3 getVertexPos(VertexData vtx, uint vertexIndex, uint compressed) {
+  if (compressed == 1u) {
+    uint64_t base = uint64_t(vertexIndex) * DECOMPRESSED_STRIDE;
+    return vec3(
+      loadFloat(vtx, base + 0),
+      loadFloat(vtx, base + 4),
+      loadFloat(vtx, base + 8)
+    );
+  } else {
+    uint64_t base = uint64_t(vertexIndex) * 12u;
+    return vec3(
+      loadFloat(vtx, base + 0),
+      loadFloat(vtx, base + 4),
+      loadFloat(vtx, base + 8)
+    );
+  }
+}
+
+vec2 getVertexUV(VertexData vtx, uint vertexIndex, uint compressed) {
+   if (compressed == 1u) {
+    uint64_t base = uint64_t(vertexIndex) * DECOMPRESSED_STRIDE; // offset past position + normal
+    return loadVec2(vtx, base);
+  } else {
+    uint64_t base = uint64_t(vertexIndex) * UV_STRIDE + UV_OFFSET;
+    return loadVec2(vtx, base);
+  }
+}
+
+vec3 getVertexNormal(VertexData vtx, uint vertexIndex, uint compressed) {
+  if (compressed == 1u) {
+    uint64_t base = uint64_t(vertexIndex) * DECOMPRESSED_STRIDE + 12u; // offset past position
+    return vec3(
+      loadFloat(vtx, base + 0),
+      loadFloat(vtx, base + 4),
+      loadFloat(vtx, base + 8)
+    );
+  } else {
+    return vec3(0.0); // uncompressed path computes from cross product
+  }
 }
 
 #CODE : RAYTRACE
@@ -407,11 +444,11 @@ void main() {
   uint mat_index = gl_InstanceCustomIndexEXT;
   uint64_t vertex_addr = addresses.address[mat_index * 3 + 0];
   uint64_t index_addr  = addresses.address[mat_index * 3 + 1];
-  uint64_t uv_addr	   = addresses.address[mat_index * 3 + 2];
+  uint64_t uv_addr     = addresses.address[mat_index * 3 + 2];
 
   MaterialData mat = material.materials[mat_index];
   vec3 albedo = mat.color.rgb;
-  vec3 normal = vec3(0);
+
   float metallic = mat.metallicData;
   float roughness = mat.roughnessData;
 
@@ -425,17 +462,40 @@ void main() {
   uint i1 = uint(indices.indices[prim * 3 + 1]);
   uint i2 = uint(indices.indices[prim * 3 + 2]);
 
-  vec2 uv0 = getVertexUV(uvData, i0);
-  vec2 uv1 = getVertexUV(uvData, i1);
-  vec2 uv2 = getVertexUV(uvData, i2);
+  vec3 p0 = getVertexPos(vtxData, i0, mat.is_compressed);
+  vec3 p1 = getVertexPos(vtxData, i1, mat.is_compressed);
+  vec3 p2 = getVertexPos(vtxData, i2, mat.is_compressed);
 
+  VertexData uvSource = (mat.is_compressed == 1u) ? vtxData : uvData;
+  vec2 uv0 = getVertexUV(uvSource, i0, mat.is_compressed);
+  vec2 uv1 = getVertexUV(uvSource, i1, mat.is_compressed);
+  vec2 uv2 = getVertexUV(uvSource, i2, mat.is_compressed);
   vec2 uv = uv0 * bary.x + uv1 * bary.y + uv2 * bary.z;
 
-  vec3 p0 = vec3(loadFloat(vtxData, i0*12+0), loadFloat(vtxData, i0*12+4), loadFloat(vtxData, i0*12+8));
-  vec3 p1 = vec3(loadFloat(vtxData, i1*12+0), loadFloat(vtxData, i1*12+4), loadFloat(vtxData, i1*12+8));
-  vec3 p2 = vec3(loadFloat(vtxData, i2*12+0), loadFloat(vtxData, i2*12+4), loadFloat(vtxData, i2*12+8));
+   vec3 normal = vec3(0);
 
-  normal = normalize(cross(p1 - p0, p2 - p0));
+
+   vec3 flat_normal = normalize(cross(p1 - p0, p2 - p0));
+
+  //vec3 normal;
+  if (mat.is_compressed == 1u) {
+    // Use stored normals from the decompressed buffer
+    vec3 n0 = getVertexNormal(vtxData, i0, mat.is_compressed);
+    vec3 n1 = getVertexNormal(vtxData, i1, mat.is_compressed);
+    vec3 n2 = getVertexNormal(vtxData, i2, mat.is_compressed);
+    normal = normalize(n0 * bary.x + n1 * bary.y + n2 * bary.z);
+
+	float len = length(normal);
+    if (len < 0.001 || isnan(len) || isinf(len)) {
+      normal = flat_normal;
+    } else {
+      normal = normal / len;
+    }
+  } else {
+    // Flat normal from cross product
+    normal = flat_normal;
+  }
+
   if (dot(normal, gl_WorldRayDirectionEXT) > 0.0)
     normal = -normal;
 
@@ -445,8 +505,8 @@ void main() {
   }
 
   if (mat.normal_texture_index > 0) { // Check if texture is valid
-        vec3 tex_color = texture(albedo_texture[nonuniformEXT(mat.normal_texture_index)], uv).rgb;
-		normal = tex_color;
+//        vec3 tex_color = texture(albedo_texture[nonuniformEXT(mat.normal_texture_index)], uv).rgb;
+//		normal = tex_color;
   }
 
   if (mat.metallic_texture_index > 0) { // Check if texture is valid
