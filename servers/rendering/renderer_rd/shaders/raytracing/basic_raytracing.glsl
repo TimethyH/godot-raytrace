@@ -195,7 +195,8 @@ for(int s = 0; s < samples; s++) {
 	int depth = 0;
 	prd.metallic = metallicValue;
 	prd.attenuation = 1.0f * prd.metallic;
-		//if(prd.metallic > 0.001){
+	prd.done = 0;
+		if(prd.metallic > 0.001){
 			// Iterative loop for the reflections
 			while(depth < 2) // TODO remove hardcoded value with vulkan recursion limit
 			{
@@ -218,7 +219,7 @@ for(int s = 0; s < samples; s++) {
 				prd.attenuation *= prd.metallic; // reduce attenuation depending on the metallic value of the material
 				depth++;
 			}
-		//}
+		}
 
 	}
 
@@ -551,7 +552,7 @@ void main() {
 
   float diffuse = DiffuseBurley(ndotl, ndotv, ldoth, roughness);
 
-  vec3 Lo = kD * vec3(diffuse) + specular * ndotl;
+  vec3 Lo = (kD * albedo.rgb * vec3(diffuse) + specular) * ndotl;
 
   prd.rayOrigin = vec4(hitPos + normal * 0.001, 1.0f);
   vec3 random_direction = cosine_sampled_hemisphere(R, roughness);
