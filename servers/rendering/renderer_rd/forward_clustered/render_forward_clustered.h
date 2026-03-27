@@ -49,6 +49,7 @@
 
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
 
+#define RB_TEX_ACCUMULATION SNAME("accumulation")
 #define RB_TEX_SPECULAR SNAME("specular")
 #define RB_TEX_SPECULAR_MSAA SNAME("specular_msaa")
 #define RB_TEX_NORMAL_ROUGHNESS SNAME("normal_roughness")
@@ -812,7 +813,9 @@ private:
 
 	rayPushConstant ray_pc;
 
+	LocalVector<RID> decompressed_blas_buffers;
 	RendererRD::RaytraceRD raytracing_rd;
+	std::unordered_map<uint64_t, uint32_t> mesh_to_address_id;
 
 public:
 	static RenderForwardClustered *get_singleton() { return singleton; }

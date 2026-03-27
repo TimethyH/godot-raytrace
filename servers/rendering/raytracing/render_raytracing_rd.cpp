@@ -13,7 +13,6 @@
 
 namespace RendererRD {
 void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_cam_pos, RID p_render_buffer, RID p_render_buffer_normal, RID p_render_buffer_specular, RID p_tlas) {
-
 	Vector<String> variants;
 	variants.push_back(" ");
 	raytracing_shader.shader.initialize(variants);
@@ -22,26 +21,27 @@ void RaytraceRD::init(const Projection &p_inv_view_proj, const Transform3D &p_ca
 	raytracing_shader.default_shader_rd = raytracing_shader.shader.version_get_shader(raytracing_shader.version, 0);
 
 	ray_scene_state.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(RaySceneState::UBO));
-	update_buffer(p_inv_view_proj, p_inv_view_proj, p_cam_pos);
+	update_buffer(p_inv_view_proj, p_inv_view_proj, p_cam_pos, Vector3(0.0f, 0.0f, 0.0f));
 
 	setup_uniform_data(p_render_buffer, p_render_buffer, p_render_buffer, p_render_buffer, p_tlas);
 
 	raytrace_pipeline = RD::get_singleton()->raytracing_pipeline_create(raytracing_shader.default_shader_rd);
 }
 
-void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos) {
+void RaytraceRD::update_buffer(const Projection &p_inv_view_proj, const Projection &p_inv_view, const Transform3D &cam_pos, const Vector3 &light_dir) {
 	//ubo set cam
 	ray_scene_state.ubo.camera_pos[0] = cam_pos.get_origin().x;
 	ray_scene_state.ubo.camera_pos[1] = cam_pos.get_origin().y;
 	ray_scene_state.ubo.camera_pos[2] = cam_pos.get_origin().z;
 	RendererRD::MaterialStorage::store_camera(p_inv_view_proj, ray_scene_state.ubo.inv_view_proj);
 	RendererRD::MaterialStorage::store_camera(p_inv_view, ray_scene_state.ubo.inv_view);
-
+	ray_scene_state.ubo.light_direction[0] = light_dir.x;
+	ray_scene_state.ubo.light_direction[1] = light_dir.y;
+	ray_scene_state.ubo.light_direction[2] = light_dir.z;
 	RD::get_singleton()->buffer_update(ray_scene_state.uniform_buffer, 0, sizeof(RaySceneState::UBO), &ray_scene_state.ubo);
 }
 
 void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_target, RID p_depth_render_target, RID p_specular_render_target, RID p_tlas) {
-	
 	Vector<RD::Uniform> uniforms;
 	{
 		RD::Uniform u;
@@ -86,30 +86,26 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 	}
 
 	{
-		MaterialStorage* material_storage = MaterialStorage::get_singleton();
+		MaterialStorage *material_storage = MaterialStorage::get_singleton();
 		RID sampler = material_storage->sampler_rd_get_default(
-			RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR,
-			RS::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+				RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR,
+				RS::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
 
 		// albedo texture
-		// TODO for now hardcoded to index 1 (albedo id) since its too late.
-		// TODO make it upload the correct textures and sample them with correct UVs
 		RD::Uniform u;
 		u.binding = 4;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-		for (const RID& tex : textures) {
-			if (!tex.is_valid()) {
+		for (int i = 0; i < static_cast<int>(textures.size()); i++) {
+			if (!RD::get_singleton()->texture_is_valid(textures[i])) {
+				print_error(vformat("Texture %d is invalid RD texture", i));
+			}
+			if (!textures[i].is_valid()) {
 				print_error("Invalid texture!");
 				u.append_id(sampler);
 				u.append_id(textures[0]); // default white
+			} else {
 				u.append_id(sampler);
-				u.append_id(textures[0]);
-			}
-			else {
-				u.append_id(sampler);
-				u.append_id(tex);
-				u.append_id(sampler);
-				u.append_id(tex);
+				u.append_id(textures[i]);
 			}
 		}
 		uniforms.push_back(u);
@@ -119,9 +115,7 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		RD::Uniform u;
 		u.binding = 5;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		//for (const RID& vertex : vertices) {
 		u.append_id(address_buffer);
-		//}
 		uniforms.push_back(u);
 	}
 
@@ -159,15 +153,33 @@ void RaytraceRD::setup_uniform_data(RID p_render_target, RID p_normal_render_tar
 		u.binding = 9;
 		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
 		RID sampler = samplers.get_sampler(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-		
+
 		u.append_id(sampler);
+		uniforms.push_back(u);
+	}
+
+	{
+		RD::Uniform u;
+		u.binding = 10;
+		u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+		u.append_id(accumulation_texture);
 		uniforms.push_back(u);
 	}
 
 	ray_scene_state.uniform_set = RD::get_singleton()->uniform_set_create(uniforms, raytracing_shader.default_shader_rd, 0); // TODO remove magic number set 0
 }
 
-void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &index) {
+void RaytraceRD::ensure_accumulation_texture(Ref<RenderSceneBuffersRD> rb) {
+	Size2i size = rb->get_internal_size();
+	if (accumulation_texture_size != size || reset_accumulation == true) {
+		RD::get_singleton()->free(accumulation_texture);
+		accumulation_texture = RID();
+		accumulation_texture_size = size;
+		reset_accumulation = true;
+	}
+}
+
+void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_storage, uint32_t &p_index, const bool is_compressed) {
 	if (!material_to_index.has(p_material)) {
 		MaterialData mat_data;
 
@@ -177,10 +189,17 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 		mat_data.albedo[2] = albedo.b;
 		mat_data.albedo[3] = albedo.a;
 
+		float metallic = p_material_storage->material_get_param(p_material, "metallic");
+		mat_data.metallicData = metallic;
+
+		float roughness = p_material_storage->material_get_param(p_material, "roughness");
+		mat_data.roughnessData = roughness;
+		mat_data.is_compressed = is_compressed;
+
 		TextureStorage *texture_storage = TextureStorage::get_singleton();
 		if (default_texture_set == false) {
 			RID default_white = texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
-			textures.push_back(default_white); // index 0 is used for default.
+			textures.push_back(default_white); // p_index 0 is used for default.
 			default_texture_set = true;
 		}
 		// Albedo
@@ -241,7 +260,7 @@ void RaytraceRD::set_material_data(RID p_material, MaterialStorage *p_material_s
 		}
 
 		materials.push_back(mat_data);
-		material_to_index[p_material] = index++;
+		material_to_index[p_material] = p_index++;
 	}
 }
 
@@ -274,11 +293,19 @@ RaytraceRD::~RaytraceRD() {
 
 // RenderSceneDataRD & scene_data, const RenderDataRD *p_render_data
 void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i viewport_size) {
+	if (reset_accumulation) {
+		current_frame = 0u;
+		reset_accumulation = false;
+	}
+
+	current_frame++;
+
 	RayPushConstant ray_push_constant;
 	ray_push_constant.clear_color[0] = { 1.0f };
 	ray_push_constant.clear_color[1] = { 0.0f };
 	ray_push_constant.clear_color[2] = { 1.0f };
 	ray_push_constant.clear_color[3] = { 1.0f };
+	ray_push_constant.frame_count = current_frame;
 
 	Vector<uint8_t> push_constant_bytes;
 	push_constant_bytes.resize(sizeof(RayPushConstant));
@@ -288,6 +315,10 @@ void RaytraceRD::trace_rays(RID tlas, RID blas, RD::RaytracingListID LID, Size2i
 	//RD::get_singleton()->acceleration_structure_build(tlas);
 
 	RD::get_singleton()->raytracing_list_bind_raytracing_pipeline(LID, raytrace_pipeline); // bind list
+
+	if (!ray_scene_state.uniform_set.is_valid()) {
+		print_error(vformat("Uniform set is not valid"));
+	}
 
 	// Bind resources
 	RD::get_singleton()->raytracing_list_bind_uniform_set(LID, ray_scene_state.uniform_set, 0);

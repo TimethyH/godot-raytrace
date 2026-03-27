@@ -3812,11 +3812,17 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
-				if (uniform.get_id_count() != (uint32_t)set_uniform.length * 2) {
-					if (set_uniform.length > 1) {
-						ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") sampler&texture elements, so it should provided twice the amount of IDs (sampler,texture pairs) to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
-					} else {
-						ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") should provide two IDs referencing a sampler and then a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+				if (set_uniform.length == 512) { // 512 hardcoded here, should be a defined value to use bindless. (can not set a variable in shader uniform because this requires setting it in reflectionBindingData aswel..)
+					if (uniform.get_id_count() > (uint32_t)set_uniform.length * 2) {
+						ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") supports a max size of (" + itos(set_uniform.length) + ") sampler&texture elements, so you should not provide more than this amount of IDs. (IDs provided: " + itos(uniform.get_id_count()) + ").");
+					}
+				} else {
+					if (uniform.get_id_count() != (uint32_t)set_uniform.length * 2) {
+						if (set_uniform.length > 1) {
+							ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") is an array of (" + itos(set_uniform.length) + ") sampler&texture elements, so it should provided twice the amount of IDs (sampler,texture pairs) to satisfy it (IDs provided: " + itos(uniform.get_id_count()) + ").");
+						} else {
+							ERR_FAIL_V_MSG(RID(), "SamplerTexture (binding: " + itos(uniform.binding) + ") should provide two IDs referencing a sampler and then a texture (IDs provided: " + itos(uniform.get_id_count()) + ").");
+						}
 					}
 				}
 

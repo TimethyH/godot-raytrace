@@ -3828,12 +3828,15 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 	// Set bindings.
 	Vector<Vector<VkDescriptorSetLayoutBinding>> vk_set_bindings;
 	vk_set_bindings.resize(shader_refl.uniform_sets.size());
+	Vector<Vector<VkDescriptorBindingFlags>> vk_binding_flags;
+	vk_binding_flags.resize(shader_refl.uniform_sets.size());
 	for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
 		for (uint32_t j = 0; j < shader_refl.uniform_sets[i].size(); j++) {
 			const ShaderUniform &uniform = shader_refl.uniform_sets[i][j];
 			VkDescriptorSetLayoutBinding layout_binding = {};
 			layout_binding.binding = uniform.binding;
 			layout_binding.descriptorCount = 1;
+			VkDescriptorBindingFlags binding_flags = 0;
 			for (uint32_t k = 0; k < SHADER_STAGE_MAX; k++) {
 				if ((uniform.stages.has_flag(ShaderStage(1U << k)))) {
 					layout_binding.stageFlags |= RD_STAGE_TO_VK_SHADER_STAGE_BITS[k];
@@ -3861,6 +3864,14 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
 					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 					layout_binding.descriptorCount = uniform.length;
+					// The bit flags set here ensure that the gpu does not allocate for all the slots, but only for the slots used.
+					// 512 here is a flag indicating that we intend to use bindless descriptors.
+					// TODO: should be a #define that the engine and shaders can refer to.
+					if (uniform.length == 512){  
+						binding_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+								VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+					}
+
 				} break;
 				case UNIFORM_TYPE_TEXTURE: {
 					layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
@@ -3895,6 +3906,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 			}
 
 			vk_set_bindings.write[i].push_back(layout_binding);
+			vk_binding_flags.write[i].push_back(binding_flags);
 		}
 	}
 
@@ -4005,8 +4017,15 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 	if (error_text.is_empty()) {
 		for (uint32_t i = 0; i < shader_refl.uniform_sets.size(); i++) {
 			// Empty ones are fine if they were not used according to spec (binding count will be 0).
+
+			VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info = {};
+			binding_flags_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+			binding_flags_info.bindingCount = vk_binding_flags[i].size();
+			binding_flags_info.pBindingFlags = vk_binding_flags[i].ptr();
+
 			VkDescriptorSetLayoutCreateInfo layout_create_info = {};
 			layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layout_create_info.pNext = &binding_flags_info;
 			layout_create_info.bindingCount = vk_set_bindings[i].size();
 			layout_create_info.pBindings = vk_set_bindings[i].ptr();
 
@@ -6243,6 +6262,7 @@ void RenderingDeviceDriverVulkan::on_device_lost() const {
 
 	VkDeviceFaultCountsEXT fault_counts = {};
 	fault_counts.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT;
+
 	VkResult vkres = device_functions.GetDeviceFaultInfoEXT(vk_device, &fault_counts, nullptr);
 
 	if (vkres != VK_SUCCESS) {

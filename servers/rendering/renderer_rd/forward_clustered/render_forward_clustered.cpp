@@ -1679,7 +1679,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 #ifdef RAYTRACING_TEST
 	static int first_run = 0;
-	if (first_run == 20) {
+	if (first_run == 50) {
 		build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::STATIC);
 		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -1699,7 +1699,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		raytracing_rd.init(p_render_data->scene_data->cam_projection.inverse(), p_render_data->scene_data->cam_transform, rb->get_internal_texture(), normal_texture, RID(), RD::get_singleton()->tlas_get_type(RD::AccelerationStructureGeometryType::STATIC));
 	}
 
-	if (first_run <= 20) {
+	if (first_run <= 50) {
 		first_run++;
 	}
 //build_acceleration_structures_from_all_geometry(p_render_data, RenderingDevice::DYNAMIC);
@@ -1813,7 +1813,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::MaterialStorage::Samplers samplers;
 
 	PassMode depth_pass_mode = PASS_MODE_DEPTH;
-	
+
 	uint32_t color_pass_flags = 0;
 
 	Vector<Color> depth_pass_clear;
@@ -1825,7 +1825,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_ssil = !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssil_enabled(p_render_data->environment);
 	bool using_motion_pass = rb_data.is_valid() && using_upscaling;
 
-		#ifdef RAYTRACING_TEST
+#ifdef RAYTRACING_TEST
 	depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 	color_pass_flags |= COLOR_PASS_FLAG_SEPARATE_SPECULAR;
 	using_separate_specular = true;
@@ -2166,7 +2166,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
-
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -2240,14 +2239,105 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RENDER_TIMESTAMP("Raytracing");
 
 	if (tlasID != RID()) {
+		//	Projection correction;
+		//correction.set_depth_correction(flip_y);
+		//correction.add_jitter_offset(taa_jitter);
+		//Projection projection = correction * cam_projection;
 
+		////store camera into ubo
+		//RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix);
+		//RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix);
+		//RendererRD::MaterialStorage::store_transform(cam_transform, ubo.inv_view_matrix);
+		//RendererRD::MaterialStorage::store_transform(cam_transform.affine_inverse(), ubo.view_matrix);
+
+		//for (uint32_t v = 0; v < view_count; v++) {
+		//	projection = correction * view_projection[v];
+		//	RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix_view[v]);
+		//	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix_view[v]);
+
+		//	ubo.eye_offset[v][0] = view_eye_offset[v].x;
+		//	ubo.eye_offset[v][1] = view_eye_offset[v].y;
+		//	ubo.eye_offset[v][2] = view_eye_offset[v].z;
+		//	ubo.eye_offset[v][3] = 0.0;
+		//}
+		//	Projection correction;
+		//correction.set_depth_correction(flip_y);
+		//correction.add_jitter_offset(taa_jitter);
+		//Projection projection = correction * cam_projection;
+
+		////store camera into ubo
+		//RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix);
+		//RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix);
+		//RendererRD::MaterialStorage::store_transform(cam_transform, ubo.inv_view_matrix);
+		//RendererRD::MaterialStorage::store_transform(cam_transform.affine_inverse(), ubo.view_matrix);
+
+		//for (uint32_t v = 0; v < view_count; v++) {
+		//	projection = correction * view_projection[v];
+		//	RendererRD::MaterialStorage::store_camera(projection, ubo.projection_matrix_view[v]);
+		//	RendererRD::MaterialStorage::store_camera(projection.inverse(), ubo.inv_projection_matrix_view[v]);
+
+		//	ubo.eye_offset[v][0] = view_eye_offset[v].x;
+		//	ubo.eye_offset[v][1] = view_eye_offset[v].y;
+		//	ubo.eye_offset[v][2] = view_eye_offset[v].z;
+		//	ubo.eye_offset[v][3] = 0.0;
+		//}
 		p_render_data->scene_data->flip_y = true;
 		Projection view = Projection(p_render_data->scene_data->cam_transform.affine_inverse());
 		Projection proj_view = p_render_data->scene_data->get_cam_projection() * view;
 		//p_render_data->scene_data->flip_y = false;
 		//Projection inv_proj_view = p_render_data->scene_data->get_cam_projection() * p_render_data->scene_data->get_view_projection(0);
 
-		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform);
+		//RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+		Transform3D inverse_transform = p_render_data->scene_data->cam_transform.affine_inverse();
+
+		Vector3 directional_light_direction;
+		for (int i = 0; i < (int)p_render_data->lights->size(); i++) {
+			RID light_instance_rid = (*p_render_data->lights)[i];
+			RID base = light_storage->light_instance_get_base_light(light_instance_rid);
+
+			if (light_storage->light_get_type(base) == RS::LIGHT_DIRECTIONAL) {
+				Transform3D light_transform = light_storage->light_instance_get_base_transform(light_instance_rid);
+				directional_light_direction = inverse_transform.basis.xform(
+																			 light_transform.basis.xform(Vector3(0, 0, 1)))
+													  .normalized();
+				break;
+			}
+		}
+
+		Input *input = Input::get_singleton();
+
+		// Check if any form of movement has occured in the last frame so we reset the accumulation
+		bool has_movement_occured = false;
+
+		if (input->is_mouse_button_pressed(MouseButton::RIGHT)) {
+			has_movement_occured = input->is_key_pressed(Key::W) ||
+					input->is_key_pressed(Key::A) ||
+					input->is_key_pressed(Key::S) ||
+					input->is_key_pressed(Key::D) ||
+					input->get_last_mouse_velocity().length_squared() > 0.0f;
+		}
+
+		raytracing_rd.should_reset_accumulation(has_movement_occured);
+
+		// Ensure that the accumulation texture is the correct size
+		raytracing_rd.ensure_accumulation_texture(rb);
+
+		// Make sure the accumulation texture exists
+		if (raytracing_rd.get_accumulation().is_null() || !raytracing_rd.get_accumulation().is_valid()) {
+			Size2i size = rb->get_internal_size();
+
+			RD::TextureFormat tformat;
+			tformat.format = RD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+			tformat.width = size.x;
+			tformat.height = size.y;
+			tformat.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT |
+					RD::TEXTURE_USAGE_STORAGE_BIT;
+			tformat.texture_type = RD::TEXTURE_TYPE_2D;
+
+			raytracing_rd.set_accumulation(RD::get_singleton()->texture_create(tformat, RD::TextureView()));
+		}
+
+		raytracing_rd.update_buffer(proj_view.inverse(), view.inverse(), p_render_data->scene_data->cam_transform, directional_light_direction);
 
 		RD::get_singleton()->draw_command_begin_label("Trace rays");
 
@@ -2292,7 +2382,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_end_label();
 	}
-
 
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -3905,6 +3994,11 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		return RID();
 	}
 
+	/*RendererRD::MeshStorage::Mesh::Surface *s = reinterpret_cast<RendererRD::MeshStorage::Mesh::Surface *>(surf->surface);
+	if (s == nullptr) {
+		return RID();
+	}*/
+
 	RID index_array = mesh_storage->surface_get_index_array(surf->surface);
 	RID vertex_array;
 	RenderingDevice::VertexFormatID vertex_format;
@@ -3922,20 +4016,190 @@ RID RenderForwardClustered::surface_create_blas(void *p_surface) {
 		return RID();
 	}
 
-	// For now, create BLAS with first surface (multi-surface BLAS is more complex)
+	uint64_t format = mesh_storage->mesh_surface_get_format(surf->surface);
+	RID blas_vertex_array = vertex_array;
+
+	// Uncompress the mesh
+	if (format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
+		AABB surface_aabb = mesh_storage->mesh_surface_get_aabb(surf->surface);
+		Vector3 aabb_pos = surface_aabb.position;
+		Vector3 aabb_size = surface_aabb.size;
+
+		Vector4 uv_scale = mesh_storage->mesh_surface_get_uv_scale(surf->surface);
+
+		uint32_t vertex_count = mesh_storage->mesh_surface_get_vertex_count(surf->surface);
+
+		// Read back the vertex buffer data
+
+		Vector<uint8_t> vertex_data = RD::get_singleton()->buffer_get_data(mesh_storage->mesh_surface_get_vertex_buffer(surf->surface));
+		if (vertex_data.is_empty()) {
+			ERR_PRINT("Failed to read vertex buffer for decompression");
+			return RID();
+		}
+
+		uint32_t position_stride = sizeof(uint16_t) * 4; // R16G16B16A16_UNORM = 8 bytes
+		uint32_t normal_stride = sizeof(uint16_t) * 2; // R16G16_UNORM = 4 bytes
+
+		const uint8_t *position_data_start = vertex_data.ptr();
+		const uint8_t *normal_data_start = vertex_data.ptr() + (position_stride * vertex_count);
+
+		//uint32_t vert_stride = mesh_storage->mesh_surface_get_vertex_buffer_size(surf->surface) / vertex_count;
+		//print_line("vert_stride: " + itos(vert_stride) + " vertex_count: " + itos(vertex_count));
+
+		RID attribute_buffer = mesh_storage->mesh_surface_get_attribute_buffer(surf->surface);
+		Vector<uint8_t> attribute_data;
+		uint32_t attr_stride = 0;
+		bool has_uvs = (format & RS::ARRAY_FORMAT_TEX_UV) && attribute_buffer.is_valid();
+
+		if (has_uvs) {
+			attribute_data = RD::get_singleton()->buffer_get_data(attribute_buffer);
+			if (!attribute_data.is_empty()) {
+				attr_stride = mesh_storage->mesh_surface_get_attribute_buffer_size(surf->surface) / vertex_count;
+			} else {
+				has_uvs = false;
+			}
+		}
+
+		// Decompressed layout: position(vec3 float) + normal(vec3 float) + uv(vec2 float) = 32 bytes
+		uint32_t dst_stride = sizeof(float) * 8;
+		Vector<uint8_t> decompressed_data;
+		decompressed_data.resize(vertex_count * dst_stride);
+		memset(decompressed_data.ptrw(), 0, decompressed_data.size());
+
+		const uint8_t *attr_src = has_uvs ? attribute_data.ptr() : nullptr;
+		uint8_t *dst = decompressed_data.ptrw();
+
+		//const uint8_t *normal_data_start = vert_src + (8 * vertex_count); // position_stride * vertex_count
+		//uint32_t normal_stride = 4; // sizeof(uint16_t) * 2
+
+		for (uint32_t v = 0; v < vertex_count; v++) {
+			const uint16_t *pos_comp = reinterpret_cast<const uint16_t *>(position_data_start + v * position_stride);
+			float *out = reinterpret_cast<float *>(dst + v * dst_stride);
+
+			// Decompress position: UNORM16 [0,65535] -> [0,1] -> real position via AABB
+			out[0] = (float(pos_comp[0]) / 65535.0f) * aabb_size.x + aabb_pos.x;
+			out[1] = (float(pos_comp[1]) / 65535.0f) * aabb_size.y + aabb_pos.y;
+			out[2] = (float(pos_comp[2]) / 65535.0f) * aabb_size.z + aabb_pos.z;
+
+			// Decompress normal from separate section (R16G16_UNORM octahedral encoding)
+			const uint16_t *norm_comp = reinterpret_cast<const uint16_t *>(normal_data_start + v * normal_stride);
+			float oct_x = (float(norm_comp[0]) / 65535.0f) * 2.0f - 1.0f;
+			float oct_y = (float(norm_comp[1]) / 65535.0f) * 2.0f - 1.0f;
+
+			// Octahedral decode
+			float nz = 1.0f - Math::abs(oct_x) - Math::abs(oct_y);
+			float nx, ny;
+			if (nz >= 0.0f) {
+				nx = oct_x;
+				ny = oct_y;
+			} else {
+				nx = (1.0f - Math::abs(oct_y)) * (oct_x >= 0.0f ? 1.0f : -1.0f);
+				ny = (1.0f - Math::abs(oct_x)) * (oct_y >= 0.0f ? 1.0f : -1.0f);
+			}
+
+			float len = Math::sqrt(nx * nx + ny * ny + nz * nz);
+			if (len > 0.0f) {
+				out[3] = nx / len;
+				out[4] = ny / len;
+				out[5] = nz / len;
+			} else {
+				out[3] = 0.0f;
+				out[4] = 1.0f;
+				out[5] = 0.0f;
+			}
+
+			// Decompress UVs from attribute buffer (UNORM16 scaled by uv_scale)
+			if (has_uvs && attr_src) {
+				//const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride);
+
+				uint32_t uv_offset = 0;
+				if (format & RS::ARRAY_FORMAT_COLOR) {
+					uv_offset += sizeof(uint32_t); // R8G8B8A8_UNORM = 4 bytes
+				}
+
+				const uint16_t *uv_comp = reinterpret_cast<const uint16_t *>(attr_src + v * attr_stride + uv_offset);
+
+				out[6] = (float(uv_comp[0]) / 65535.0f) * uv_scale.x + uv_scale.z;
+				out[7] = (float(uv_comp[1]) / 65535.0f) * uv_scale.y + uv_scale.w;
+			} else {
+				out[6] = 1.0f;
+				out[7] = 0.0f;
+			}
+		}
+
+		//Create new vertex buffer with decompressed data
+		BitField<RD::BufferCreationBits> creation_bits;
+		creation_bits.set_flag(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+		creation_bits.set_flag(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+
+		RID decompressed_buffer = RD::get_singleton()->vertex_buffer_create(
+				decompressed_data.size(), decompressed_data, creation_bits);
+
+		// Create vertex format for float3 positions only
+		Vector<RD::VertexAttribute> attribs;
+		RD::VertexAttribute pos_attrib;
+		pos_attrib.location = 0;
+		pos_attrib.offset = 0;
+		pos_attrib.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+		pos_attrib.stride = dst_stride;
+		attribs.push_back(pos_attrib);
+
+		RD::VertexAttribute normal_attrib;
+		normal_attrib.location = 1;
+		normal_attrib.offset = sizeof(float) * 3;
+		normal_attrib.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+		normal_attrib.stride = dst_stride;
+		attribs.push_back(normal_attrib);
+
+		RD::VertexAttribute uv_attrib;
+		uv_attrib.location = 2;
+		uv_attrib.offset = sizeof(float) * 6;
+		uv_attrib.format = RD::DATA_FORMAT_R32G32_SFLOAT;
+		uv_attrib.stride = dst_stride;
+		attribs.push_back(uv_attrib);
+
+		RD::VertexFormatID new_format = RD::get_singleton()->vertex_format_create(attribs);
+
+		Vector<RID> buffers;
+		buffers.push_back(decompressed_buffer);
+		buffers.push_back(decompressed_buffer);
+		buffers.push_back(decompressed_buffer);
+		vertex_array = RD::get_singleton()->vertex_array_create(vertex_count, new_format, buffers);
+		vertex_format = new_format;
+
+		decompressed_blas_buffers.push_back(decompressed_buffer);
+	} else {
+		// Not compressed, use the original vertex data
+		/*	uint32_t input_mask = (1 << RS::ARRAY_VERTEX) |
+					(1 << RS::ARRAY_NORMAL) |
+					(1 << RS::ARRAY_TEX_UV) |
+					(1 << RS::ARRAY_INDEX);*/
+
+		RD::VertexFormatID unused_format;
+		mesh_storage->mesh_surface_get_vertex_arrays_and_format(surf->surface, input_mask, false, vertex_array, unused_format);
+	}
+
+	if (vertex_array.is_null()) {
+		ERR_PRINT("No valid triangle surfaces found for BLAS creation");
+		return RID();
+	}
+
+	//RID index_array = mesh_storage->surface_get_index_array(surf->surface);
 	BitField<RD::GeometryBits> geometry_bits = RD::GeometryBits::GEOMETRY_OPAQUE;
 
-	return RD::get_singleton()->blas_create(
-			vertex_array,
-			index_array,
-			geometry_bits);
+	return RD::get_singleton()->blas_create(vertex_array, index_array, geometry_bits);
 }
 
 void RenderForwardClustered::build_acceleration_structures_from_all_geometry(RenderDataRD *p_render_data, RenderingDevice::AccelerationStructureGeometryType p_type) {
 	RenderingDevice *rd = RenderingDevice::get_singleton();
-
 	LocalVector<RID> &blases = rd->get_type_blases(p_type);
 	RID &tlas = rd->tlas_get_type(p_type);
+
+	// Free old decompressed buffers from previous build
+	for (uint32_t i = 0; i < decompressed_blas_buffers.size(); i++) {
+		rd->free(decompressed_blas_buffers[i]);
+	}
+	decompressed_blas_buffers.clear();
 
 	LocalVector<RID> local_blases;
 	LocalVector<Transform3D> transforms;
@@ -3943,25 +4207,24 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 	PagedArray<RendererSceneCull::InstanceData> &instance_data = *p_render_data->instance_data_before_culling;
 	uint32_t material_index = 0;
 	uint32_t address_id = 0;
-	// Iterate ALL instances in the scenario
+
 	for (uint64_t i = 0; i < instance_data.size(); i++) {
 		RendererSceneCull::InstanceData &idata = instance_data[i];
 
-		// Check if it's geometry
 		uint32_t base_type = idata.flags & RendererSceneCull::InstanceData::FLAG_BASE_TYPE_MASK;
 		if (!((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK)) {
-			continue; // Skip non-geometry (lights, probes, etc.)
+			continue;
 		}
 
-		// Skip instances that don't cast shadows
-		// (there is helper geometry placed at the origin of the scene which gets hit by our raytracer
-		// This causes unexpected issues with material indexing)
 		if (!(idata.flags & RendererSceneCull::InstanceData::FLAG_CAST_SHADOWS)) {
 			continue;
 		}
 
-		// Access the geometry instance
 		RenderGeometryInstance *geom = idata.instance_geometry;
+		if (!geom) {
+			continue;
+		}
+
 		GeometryInstanceForwardClustered *inst =
 				static_cast<GeometryInstanceForwardClustered *>(geom);
 
@@ -3972,72 +4235,93 @@ void RenderForwardClustered::build_acceleration_structures_from_all_geometry(Ren
 		RID mesh_rid = idata.base_rid;
 		Transform3D world_transform = geom->get_transform();
 
+		if (!mesh_rid.is_valid()) {
+			continue;
+		}
 
-		if (mesh_rid.is_valid()) {
-			RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-			RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
-			uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
-			for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
-				RID material = inst->data->surface_materials[surface_index];
+		RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
-				if (!material.is_valid()) {
-					material = mesh_storage->mesh_surface_get_material(mesh_rid, surface_index);
-				}
+		// Material gathering — use correct surface index
+		uint32_t surface_count = mesh_storage->mesh_get_surface_count(mesh_rid);
+		for (uint32_t surface_index = 0; surface_index < surface_count; surface_index++) {
+			RID material;
 
-				if (inst->data->material_override.is_valid()) {
-					material = inst->data->material_override;
-				}
+			// Check per-surface material override first
+			if (surface_index < (uint32_t)inst->data->surface_materials.size() && inst->data->surface_materials[surface_index].is_valid()) {
+				material = inst->data->surface_materials[surface_index];
+			} else {
+				material = mesh_storage->mesh_surface_get_material(mesh_rid, surface_index);
+			}
 
-				if (!material.is_valid()) {
-					continue; // No material on this surface
-				}
-				
-				raytracing_rd.set_material_data(material, material_storage, material_index);
+			// Global material override takes precedence
+			if (inst->data->material_override.is_valid()) {
+				material = inst->data->material_override;
+			}
+
+			void *surface = mesh_storage->mesh_get_surface(mesh_rid, surface_index);
+			uint64_t surface_format = mesh_storage->mesh_surface_get_format(surface);
+			bool is_compressed = (surface_format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0;
+
+			if (material.is_valid()) {
+				raytracing_rd.set_material_data(material, material_storage, material_index, is_compressed);
 			}
 		}
 
-		// Build BLAS for unique meshes
+		auto &gpuAddress = RD::get_singleton()->gpu_addresses;
+
 		if (!rd->has_blas(mesh_rid)) {
+			// First time seeing this mesh — create BLAS
 			RID new_blas = surface_create_blas(inst->surface_caches);
-			local_blases.push_back(new_blas);
+			if (!new_blas.is_valid()) {
+				continue;
+			}
+
 			rd->blas_add_to_map(mesh_rid, new_blas);
-			transforms.push_back(world_transform);
-		} else {
-			RID new_blas = rd->blas_get_or_null(mesh_rid); // No check needed because of if-statement
+			mesh_to_address_id[mesh_rid.get_id()] = address_id;
+			address_id++;
+
 			local_blases.push_back(new_blas);
 			transforms.push_back(world_transform);
+
+			uint32_t addr_id = mesh_to_address_id[mesh_rid.get_id()];
+			raytracing_rd.add_address(gpuAddress.vertex_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.index_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.uv_adresses[addr_id]);
+		} else {
+			// Mesh already has a BLAS — reuse it with this instance's transform
+			RID existing_blas = rd->blas_get_or_null(mesh_rid);
+			local_blases.push_back(existing_blas);
+			transforms.push_back(world_transform);
+
+			uint32_t addr_id = mesh_to_address_id[mesh_rid.get_id()];
+			raytracing_rd.add_address(gpuAddress.vertex_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.index_adresses[addr_id]);
+			raytracing_rd.add_address(gpuAddress.uv_adresses[addr_id]);
 		}
-		// The data in the shader assumes this layout. vertex, index, uv.
-		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.vertex_adresses[address_id]);
-		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.index_adresses[address_id]);
-		raytracing_rd.add_address(RD::get_singleton()->gpu_addresses.uv_adresses[address_id]);
-		address_id++;
 	}
 
 	raytracing_rd.upload_material_data();
 	raytracing_rd.upload_addresses();
-	
 
-	// Maybe error message?
 	if (local_blases.size() <= 0) {
 		return;
 	}
 
-	// This prevents the local blases from overwriting the current acceleration structure if the new structure is invalid
-	blases.clear(); // Maybe free blases?
+	blases.clear();
 	blases = local_blases;
 
 	for (int64_t i = 0; i < blases.size(); ++i) {
 		rd->acceleration_structure_build(blases[i]);
 	}
 
-	// CHECK: Flags might be incorrect.
 	BitField<RenderingDevice::BufferCreationBits> creation_bits;
 	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_DEVICE_ADDRESS_BIT);
 	creation_bits.set_flag(RenderingDevice::BufferCreationBits::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
 	RID tlas_instances_buffer = rd->tlas_instances_buffer_create(blases.size(), creation_bits);
 	rd->tlas_instances_buffer_fill(tlas_instances_buffer, blases, transforms);
 
+	rd->barrier(RD::BARRIER_MASK_ALL_BARRIERS, RD::BARRIER_MASK_ALL_BARRIERS);
 	tlas = rd->tlas_create(tlas_instances_buffer);
 	rd->acceleration_structure_build(tlas);
 }
